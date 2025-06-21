@@ -130,6 +130,47 @@ def create_token_progress_bar(percentage, width=50, plain=False):
     return progress
 
 
+def create_model_ratio_bar(model_usage, width=40, plain=False):
+    """Return a single bar visualizing token ratio across models."""
+    total_tokens = sum(v["total"] for v in model_usage.values())
+    if total_tokens <= 0:
+        return Text("") if not plain and RICH_AVAILABLE else ""
+
+    def _get_color(model):
+        if "opus" in model:
+            return ("cyan", "\033[96m")
+        if "sonnet" in model:
+            return ("green", "\033[92m")
+        return ("magenta", "\033[95m")
+
+    segments = []
+    info_parts = []
+    allocated = 0
+    items = list(model_usage.items())
+    for idx, (model, data) in enumerate(items):
+        percentage = (data["total"] / total_tokens) * 100
+        bar_len = int(width * percentage / 100)
+        if idx == len(items) - 1:
+            bar_len = width - allocated
+        allocated += bar_len
+        color_name, color_code = _get_color(model)
+        name = format_model_name(model)
+        if plain or not RICH_AVAILABLE:
+            segments.append(f"{color_code}{'█' * bar_len}")
+        else:
+            segments.append(Text("█" * bar_len, style=color_name))
+        info_parts.append(f"{name} {percentage:.0f}%")
+
+    if plain or not RICH_AVAILABLE:
+        reset = "\033[0m"
+        bar = "".join(segments) + reset
+        return f"{bar} {' '.join(info_parts)}"
+
+    text = Text.assemble(*segments)
+    text.append(" " + " ".join(info_parts))
+    return text
+
+
 def create_time_progress_bar(elapsed_minutes, total_minutes, width=50, plain=False):
     """Create a time progress bar showing time until reset."""
     percentage = 0 if total_minutes <= 0 else min(100, (elapsed_minutes / total_minutes) * 100)
@@ -597,7 +638,11 @@ def run_plain_once(
         f"🔥 {white}Burn Rate:{reset}      "
         f"{yellow}{burn_rate:.1f}{reset} {gray}tokens/min{reset}"
     )
-    if model_usage:
+    if model_usage and len(model_usage) > 1:
+        bar = create_model_ratio_bar(model_usage, plain=True)
+        print(f"💠 {bar}")
+        print()
+    elif model_usage:
         print("\n💠 Model Usage:")
         total_models_tokens = sum(v["total"] for v in model_usage.values())
         for m, md in model_usage.items():
@@ -779,7 +824,11 @@ def run_rich_once(
     if active_model:
         body.insert(1, Text(f"Active Model: {format_model_name(active_model)}"))
 
-    if model_usage:
+    if model_usage and len(model_usage) > 1:
+        bar = create_model_ratio_bar(model_usage)
+        body.append(bar)
+        body.append(Text(""))
+    elif model_usage:
         body.append(Text("\n💠 Model Usage:", style="bold"))
         total_models_tokens = sum(v["total"] for v in model_usage.values())
         for m, md in model_usage.items():
