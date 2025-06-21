@@ -13,4 +13,3 @@ def test_print_header_shows_model(capsys):
     monitor.print_header("claude-opus-4")
     captured = capsys.readouterr().out
     assert "Active Model: Opus" in captured
-
