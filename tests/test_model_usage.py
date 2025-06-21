@@ -149,3 +149,10 @@ def test_format_model_usage_average_fallback():
     )
     expected_cost_str = f"${expected_cost:.2f}"
     assert expected_cost_str in summary
+
+
+def test_get_model_pricing_fallback():
+    monitor._PRICING_CACHE = None
+    with patch("urllib.request.urlopen", side_effect=Exception):
+        pricing = monitor.get_model_pricing("claude-opus-4")
+    assert pricing == monitor.DEFAULT_MODEL_PRICING["claude-opus-4"]
