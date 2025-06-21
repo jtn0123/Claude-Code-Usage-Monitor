@@ -620,6 +620,13 @@ Whether you need help with setup, have feature requests, found a bug, or want to
 
 ---
 
+## Coding Standards
+
+The project enforces linting and complexity checks. Cyclomatic complexity should
+be grade **B** or better as reported by `radon`.
+
+---
+
 ## 📝 License
 
 [MIT License](LICENSE) - feel free to use and modify as needed.

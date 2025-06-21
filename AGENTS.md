@@ -46,5 +46,9 @@ We enforce formatting, style and type checks. Configuration lives in `pyproject.
    ```bash
    pylint ccusage_monitor.py
    ```
+5. **Radon** – check cyclomatic complexity. Functions should be grade B or better.
+   ```bash
+   radon cc -n B ccusage_monitor.py
+   ```
 
 All lint commands should finish with no errors. Run them before committing any code.
