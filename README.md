@@ -61,7 +61,7 @@ npm install -g ccusage
 
 
 # Clone and run
-git clone https://github.com/Maciek-roboblog/Claude-Code-Usage-Monitor.git
+git clone https://github.com/jtn0123/Claude-Code-Usage-Monitor.git
 cd Claude-Code-Usage-Monitor
 pip install -r requirements.txt
 python ccusage_monitor.py
@@ -616,7 +616,7 @@ This tool builds upon the excellent [ccusage](https://github.com/ryoppippi/ccusa
 
 **⭐ Star this repo if you find it useful! ⭐**
 
-[Report Bug](https://github.com/Maciek-roboblog/Claude-Code-Usage-Monitor/issues) • [Request Feature](https://github.com/Maciek-roboblog/Claude-Code-Usage-Monitor/issues) • [Contribute](CONTRIBUTING.md)
+[Report Bug](https://github.com/jtn0123/Claude-Code-Usage-Monitor/issues) • [Request Feature](https://github.com/jtn0123/Claude-Code-Usage-Monitor/issues) • [Contribute](CONTRIBUTING.md)
 
 </div>
 
@@ -624,4 +624,4 @@ This tool builds upon the excellent [ccusage](https://github.com/ryoppippi/ccusa
 
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=Maciek-roboblog/Claude-Code-Usage-Monitor&type=Date)](https://www.star-history.com/#Maciek-roboblog/Claude-Code-Usage-Monitor&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=jtn0123/Claude-Code-Usage-Monitor&type=Date)](https://www.star-history.com/#jtn0123/Claude-Code-Usage-Monitor&Date)

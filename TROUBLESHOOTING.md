@@ -451,7 +451,7 @@ ccusage blocks --json
 
 ### Where to Get Help
 
-1. **GitHub Issues**: [Create new issue](https://github.com/Maciek-roboblog/Claude-Code-Usage-Monitor/issues/new)
+1. **GitHub Issues**: [Create new issue](https://github.com/jtn0123/Claude-Code-Usage-Monitor/issues/new)
 2. **Email**: [maciek@roboblog.eu](mailto:maciek@roboblog.eu)
 3. **Documentation**: Check [README.md](README.md) for installation and usage
 
@@ -561,4 +561,4 @@ python ccusage_monitor.py
 
 ---
 
-**Still having issues?** Don't hesitate to [create an issue](https://github.com/Maciek-roboblog/Claude-Code-Usage-Monitor/issues/new) or [contact us directly](mailto:maciek@roboblog.eu)!
+**Still having issues?** Don't hesitate to [create an issue](https://github.com/jtn0123/Claude-Code-Usage-Monitor/issues/new) or [contact us directly](mailto:maciek@roboblog.eu)!
