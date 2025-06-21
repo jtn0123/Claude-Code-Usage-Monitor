@@ -124,7 +124,7 @@ virtualenv venv
 npm install -g ccusage
 
 # 2. Clone the repository
-git clone https://github.com/Maciek-roboblog/Claude-Code-Usage-Monitor.git
+git clone https://github.com/jtn0123/Claude-Code-Usage-Monitor
 cd Claude-Code-Usage-Monitor
 
 # 3. Create virtual environment
