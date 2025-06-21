@@ -535,7 +535,7 @@ def run_plain(args, token_limit):
             # Token Usage section
             print(
                 f"📊 {white}Token Usage:{reset}    "
-                f"{create_token_progress_bar(usage_percentage)}"
+                f"{create_token_progress_bar(usage_percentage, plain=True)}"
             )
             print()
 
@@ -544,7 +544,7 @@ def run_plain(args, token_limit):
             time_since_reset = max(0, 300 - minutes_to_reset)
             print(
                 f"⏳ {white}Time to Reset:{reset}  "
-                f"{create_time_progress_bar(time_since_reset, 300)}"
+                f"{create_time_progress_bar(time_since_reset, 300, plain=True)}"
             )
             print()
 
