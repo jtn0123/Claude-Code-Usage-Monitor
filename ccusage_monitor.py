@@ -16,6 +16,7 @@ try:
     from rich.panel import Panel
     from rich.live import Live
     from rich.text import Text
+
     RICH_AVAILABLE = True
 except Exception:  # pragma: no cover
     RICH_AVAILABLE = False
@@ -84,8 +85,14 @@ def get_session_model_usage(active_block, session_info):
         for br in target_session["modelBreakdowns"]:
             model = br.get("model")
             total = br.get("totalTokens", br.get("total", 0))
+            input_tokens = br.get("inputTokens")
+            output_tokens = br.get("outputTokens")
             if model:
-                model_usage[model] = total
+                model_usage[model] = {
+                    "tokens": total,
+                    "input_tokens": input_tokens,
+                    "output_tokens": output_tokens,
+                }
     return model_usage
 
 
@@ -121,7 +128,9 @@ def create_token_progress_bar(percentage, width=50, plain=False):
 
 def create_time_progress_bar(elapsed_minutes, total_minutes, width=50, plain=False):
     """Create a time progress bar showing time until reset."""
-    percentage = 0 if total_minutes <= 0 else min(100, (elapsed_minutes / total_minutes) * 100)
+    percentage = (
+        0 if total_minutes <= 0 else min(100, (elapsed_minutes / total_minutes) * 100)
+    )
     if plain or not RICH_AVAILABLE:
         filled = int(width * percentage / 100)
         blue_bar = "█" * filled
@@ -197,20 +206,30 @@ def get_model_pricing(model: str) -> dict | None:
     return DEFAULT_MODEL_PRICING.get(model)
 
 
-def format_model_usage(model, tokens, total_tokens):
+def format_model_usage(
+    model, tokens, total_tokens, input_tokens=None, output_tokens=None
+):
     """Return formatted percentage, tokens and cost for a model."""
+    if tokens is None:
+        tokens = (input_tokens or 0) + (output_tokens or 0)
+
     percentage = (tokens / total_tokens * 100) if total_tokens > 0 else 0.0
+
     pricing = get_model_pricing(model)
     if pricing:
         input_cost = pricing.get("input_cost_per_token", 0)
         output_cost = pricing.get("output_cost_per_token", 0)
-        if input_cost and output_cost:
-            cost_per_token = (input_cost + output_cost) / 2
+        if input_tokens is not None and output_tokens is not None:
+            cost = input_tokens * input_cost + output_tokens * output_cost
         else:
-            cost_per_token = input_cost or output_cost
+            if input_cost and output_cost:
+                cost_per_token = (input_cost + output_cost) / 2
+            else:
+                cost_per_token = input_cost or output_cost
+            cost = tokens * cost_per_token
     else:
-        cost_per_token = 0
-    cost = tokens * cost_per_token
+        cost = 0
+
     return f"{percentage:5.1f}% {tokens:,} tokens (${cost:.2f})"
 
 
@@ -457,7 +476,7 @@ def run_plain(args, token_limit):
         print("\033[?25l", end="", flush=True)  # Hide cursor
 
         while True:
-                # Move cursor to top without clearing
+            # Move cursor to top without clearing
             print("\033[H", end="", flush=True)
 
             data = run_ccusage()
@@ -575,9 +594,15 @@ def run_plain(args, token_limit):
             )
             if model_usage:
                 print("\n💠 Model Usage:")
-                total_models_tokens = sum(model_usage.values())
-                for m, t in model_usage.items():
-                    summary = format_model_usage(m, t, total_models_tokens)
+                total_models_tokens = sum(v["tokens"] for v in model_usage.values())
+                for m, stats in model_usage.items():
+                    summary = format_model_usage(
+                        m,
+                        stats["tokens"],
+                        total_models_tokens,
+                        stats.get("input_tokens"),
+                        stats.get("output_tokens"),
+                    )
                     print(f"    {m:<15} {summary}")
                 print()
             else:
@@ -696,19 +721,25 @@ def run_rich(args, token_limit):
 
             start_time_str = active_block.get("startTime")
             if start_time_str:
-                start_time = datetime.fromisoformat(start_time_str.replace("Z", "+00:00"))
+                start_time = datetime.fromisoformat(
+                    start_time_str.replace("Z", "+00:00")
+                )
                 current_time = datetime.now(start_time.tzinfo)
             else:
                 current_time = datetime.now()
 
             burn_rate = calculate_hourly_burn_rate(data["blocks"], current_time)
-            reset_time = get_next_reset_time(current_time, args.reset_hour, args.timezone)
+            reset_time = get_next_reset_time(
+                current_time, args.reset_hour, args.timezone
+            )
             time_to_reset = reset_time - current_time
             minutes_to_reset = time_to_reset.total_seconds() / 60
 
             if burn_rate > 0 and tokens_left > 0:
                 minutes_to_depletion = tokens_left / burn_rate
-                predicted_end_time = current_time + timedelta(minutes=minutes_to_depletion)
+                predicted_end_time = current_time + timedelta(
+                    minutes=minutes_to_depletion
+                )
             else:
                 predicted_end_time = reset_time
 
@@ -739,9 +770,15 @@ def run_rich(args, token_limit):
 
             if model_usage:
                 body.append(Text("\n💠 Model Usage:", style="bold"))
-                total_models_tokens = sum(model_usage.values())
-                for m, t in model_usage.items():
-                    summary = format_model_usage(m, t, total_models_tokens)
+                total_models_tokens = sum(v["tokens"] for v in model_usage.values())
+                for m, stats in model_usage.items():
+                    summary = format_model_usage(
+                        m,
+                        stats["tokens"],
+                        total_models_tokens,
+                        stats.get("input_tokens"),
+                        stats.get("output_tokens"),
+                    )
                     body.append(Text(f"    {m:<15} {summary}"))
                 body.append(Text(""))
             else:

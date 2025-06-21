@@ -38,7 +38,18 @@ def test_get_session_model_usage_by_id():
         ]
     }
     mapping = monitor.get_session_model_usage(active_block, session_info)
-    assert mapping == {"claude-sonnet-4": 1000, "claude-opus-4": 500}
+    assert mapping == {
+        "claude-sonnet-4": {
+            "tokens": 1000,
+            "input_tokens": None,
+            "output_tokens": None,
+        },
+        "claude-opus-4": {
+            "tokens": 500,
+            "input_tokens": None,
+            "output_tokens": None,
+        },
+    }
 
 
 def test_get_session_model_usage_no_match():
@@ -61,7 +72,13 @@ def test_get_session_model_usage_no_match():
         ]
     }
     mapping = monitor.get_session_model_usage(active_block, session_info)
-    assert mapping == {"claude-opus-4": 75}
+    assert mapping == {
+        "claude-opus-4": {
+            "tokens": 75,
+            "input_tokens": None,
+            "output_tokens": None,
+        }
+    }
 
 
 def test_format_model_usage_summary():
@@ -72,11 +89,37 @@ def test_format_model_usage_summary():
         "output_cost_per_token": 0.000075,
     }
     with patch.object(monitor, "get_model_pricing", return_value=pricing):
-        summary = monitor.format_model_usage("claude-opus-4", tokens, total_tokens)
-    expected_cost = tokens * (pricing["input_cost_per_token"] + pricing["output_cost_per_token"]) / 2
+        summary = monitor.format_model_usage(
+            "claude-opus-4",
+            tokens,
+            total_tokens,
+            input_tokens=3000,
+            output_tokens=2000,
+        )
+    expected_cost = (
+        3000 * pricing["input_cost_per_token"] + 2000 * pricing["output_cost_per_token"]
+    )
     expected_cost_str = f"${expected_cost:.2f}"
     assert "50.0%" in summary
     assert "5,000" in summary
+    assert expected_cost_str in summary
+
+
+def test_format_model_usage_average_fallback():
+    tokens = 5000
+    total_tokens = 10000
+    pricing = {
+        "input_cost_per_token": 0.000015,
+        "output_cost_per_token": 0.000075,
+    }
+    with patch.object(monitor, "get_model_pricing", return_value=pricing):
+        summary = monitor.format_model_usage("claude-opus-4", tokens, total_tokens)
+    expected_cost = (
+        tokens
+        * (pricing["input_cost_per_token"] + pricing["output_cost_per_token"])
+        / 2
+    )
+    expected_cost_str = f"${expected_cost:.2f}"
     assert expected_cost_str in summary
 
 
