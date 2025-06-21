@@ -14,7 +14,8 @@ spec.loader.exec_module(monitor)
 def run_once_helper(data, session_info):
     console = Console(record=True)
     args = Namespace(plan="pro", reset_hour=None, timezone="UTC", plain=False)
-    monitor.run_rich_once(args, 7000, data, session_info, console=console)
+    state = monitor.MonitorState(token_limit=7000)
+    monitor.run_rich_once(args, data, session_info, console=console, state=state)
     return console.export_text()
 
 

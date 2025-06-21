@@ -4,10 +4,12 @@ import subprocess
 import json
 import sys
 import time
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 import os
 import argparse
 import urllib.request
+from urllib.error import URLError
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 try:
@@ -18,8 +20,37 @@ try:
     from rich.text import Text
 
     RICH_AVAILABLE = True
-except Exception:  # pragma: no cover
+except ImportError:  # pragma: no cover
     RICH_AVAILABLE = False
+
+# ANSI color codes for plain output
+COLOR_GREEN = "\033[92m"
+COLOR_RED = "\033[91m"
+COLOR_RESET = "\033[0m"
+COLOR_CYAN = "\033[96m"
+COLOR_BLUE = "\033[94m"
+COLOR_YELLOW = "\033[93m"
+COLOR_WHITE = "\033[97m"
+COLOR_GRAY = "\033[90m"
+
+
+@dataclass
+class MonitorState:
+    """Tracking state for plan switching notifications."""
+
+    token_limit: int
+    switched_to_custom_max: bool = False
+    switch_notification_shown: bool = False
+
+
+@dataclass
+class ModelUsageInfo:
+    """Container for per-model usage details."""
+
+    used: int
+    total: int
+    input_tokens: int | None = None
+    output_tokens: int | None = None
 
 
 def resolve_timezone(tz_name: str | None) -> ZoneInfo:
@@ -138,25 +169,24 @@ def create_token_progress_bar(percentage, width=50, plain=False):
         filled = int(width * percentage / 100)
         green_bar = "█" * filled
         red_bar = "░" * (width - filled)
-        green = "\033[92m"
-        red = "\033[91m"
-        reset = "\033[0m"
-        return f"🟢 [{green}{green_bar}{red}{red_bar}{reset}] {percentage:.1f}%"
+        return (
+            f"🟢 [{COLOR_GREEN}{green_bar}{COLOR_RED}{red_bar}{COLOR_RESET}]" f" {percentage:.1f}%"
+        )
     progress = Progress(
         BarColumn(bar_width=width, complete_style="bright_green"),
         TextColumn("{task.percentage:>5.1f}%"),
         expand=False,
     )
-    progress.add_task("", total=100, completed=percentage)
+    progress.add_task("", total=100, completed=int(percentage))
     return progress
 
 
 def get_model_color(model):
     """Return rich and plain color for a model name."""
     if "opus" in model:
-        return ("cyan", "\033[96m")
+        return ("cyan", COLOR_CYAN)
     if "sonnet" in model:
-        return ("green", "\033[92m")
+        return ("green", COLOR_GREEN)
     return ("magenta", "\033[95m")
 
 
@@ -166,7 +196,7 @@ def create_model_ratio_bar(model_usage, width=40, plain=False):
     if total_tokens <= 0:
         return Text("") if not plain and RICH_AVAILABLE else ""
 
-    def _add_segment(model, data, is_last, allocated, segments, info_parts):
+    def _add_segment(model, data, is_last, allocated):
         percentage = (data["total"] / total_tokens) * 100
         bar_len = width - allocated if is_last else int(width * percentage / 100)
         color_name, color_code = get_model_color(model)
@@ -188,13 +218,10 @@ def create_model_ratio_bar(model_usage, width=40, plain=False):
             data,
             idx == len(items) - 1,
             allocated,
-            segments,
-            info_parts,
         )
 
     if plain or not RICH_AVAILABLE:
-        reset = "\033[0m"
-        ratio_bar = "".join(segments) + reset
+        ratio_bar = "".join(segments) + COLOR_RESET
         return f"{ratio_bar} {' '.join(info_parts)}"
 
     text = Text.assemble(*segments)
@@ -209,11 +236,8 @@ def create_time_progress_bar(elapsed_minutes, total_minutes, width=50, plain=Fal
         filled = int(width * percentage / 100)
         blue_bar = "█" * filled
         red_bar = "░" * (width - filled)
-        blue = "\033[94m"
-        red = "\033[91m"
-        reset = "\033[0m"
         remaining_time = format_time(max(0, total_minutes - elapsed_minutes))
-        return f"⏰ [{blue}{blue_bar}{red}{red_bar}{reset}] {remaining_time}"
+        return f"⏰ [{COLOR_BLUE}{blue_bar}{COLOR_RED}{red_bar}{COLOR_RESET}]" f" {remaining_time}"
 
     remaining_time = format_time(max(0, total_minutes - elapsed_minutes))
     progress = Progress(
@@ -226,32 +250,27 @@ def create_time_progress_bar(elapsed_minutes, total_minutes, width=50, plain=Fal
 
 
 def create_model_progress_bar(
-    model,
-    used,
-    total,
-    width=40,
-    plain=False,
-    *,
-    input_tokens=None,
-    output_tokens=None,
+    model: str,
+    usage: ModelUsageInfo,
+    width: int = 40,
+    plain: bool = False,
 ):
     """Return a per-model progress bar including token and cost summary."""
-    percentage = (used / total * 100) if total > 0 else 0.0
+    percentage = (usage.used / usage.total * 100) if usage.total > 0 else 0.0
     summary = format_model_usage(
         model,
-        used,
-        total,
-        input_tokens=input_tokens,
-        output_tokens=output_tokens,
+        usage.used,
+        usage.total,
+        input_tokens=usage.input_tokens,
+        output_tokens=usage.output_tokens,
     )
     if plain or not RICH_AVAILABLE:
         filled = int(width * percentage / 100)
         green_bar = "█" * filled
         red_bar = "░" * (width - filled)
-        green = "\033[92m"
-        red = "\033[91m"
-        reset = "\033[0m"
-        return f"{model:<15} [{green}{green_bar}{red}{red_bar}{reset}] {summary}"
+        return (
+            f"{model:<15} " f"[{COLOR_GREEN}{green_bar}{COLOR_RED}{red_bar}{COLOR_RESET}] {summary}"
+        )
 
     progress = Progress(
         TextColumn(f"{model:<15}"),
@@ -259,13 +278,13 @@ def create_model_progress_bar(
         TextColumn(summary),
         expand=False,
     )
-    progress.add_task("", total=100, completed=percentage)
+    progress.add_task("", total=100, completed=int(percentage))
     return progress
 
 
 # Pricing data source used by the upstream `ccusage` project
 LITELLM_PRICING_URL = (
-    "https://raw.githubusercontent.com/BerriAI/litellm/main/" "model_prices_and_context_window.json"
+    "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json"
 )
 
 # Fallback pricing in case fetching from LiteLLM fails
@@ -299,19 +318,28 @@ DEFAULT_MODEL_PRICING = {
 _PRICING_CACHE: dict | None = None
 
 
-def get_model_pricing(model: str) -> dict | None:
-    """Fetch pricing information for a model from LiteLLM."""
-    global _PRICING_CACHE
+def _fetch_pricing_cache() -> dict:
+    global _PRICING_CACHE  # pylint: disable=global-statement
     if _PRICING_CACHE is None:
         try:
             with urllib.request.urlopen(LITELLM_PRICING_URL, timeout=5) as resp:
                 _PRICING_CACHE = json.load(resp)
-        except Exception:
+        except (  # pylint: disable=broad-exception-caught
+            URLError,
+            json.JSONDecodeError,
+            Exception,
+        ):
             _PRICING_CACHE = DEFAULT_MODEL_PRICING.copy()
-    pricing = _PRICING_CACHE.get(model)
+    return _PRICING_CACHE
+
+
+def get_model_pricing(model: str) -> dict | None:
+    """Fetch pricing information for a model from LiteLLM."""
+    pricing_cache = _fetch_pricing_cache()
+    pricing = pricing_cache.get(model)
     if pricing:
         return pricing
-    for key, value in _PRICING_CACHE.items():
+    for key, value in pricing_cache.items():
         if model in key:
             return value
     return DEFAULT_MODEL_PRICING.get(model)
@@ -362,15 +390,11 @@ def format_model_name(model: str | None) -> str | None:
 
 def print_header(active_model: str | None = None):
     """Print the stylized header with sparkles."""
-    cyan = "\033[96m"
-    blue = "\033[94m"
-    reset = "\033[0m"
-
     # Sparkle pattern
-    sparkles = f"{cyan}✦ ✧ ✦ ✧ {reset}"
+    sparkles = f"{COLOR_CYAN}✦ ✧ ✦ ✧ {COLOR_RESET}"
 
-    print(f"{sparkles}{cyan}CLAUDE TOKEN MONITOR{reset} {sparkles}")
-    print(f"{blue}{'=' * 60}{reset}")
+    print(f"{sparkles}{COLOR_CYAN}CLAUDE TOKEN MONITOR{COLOR_RESET} {sparkles}")
+    print(f"{COLOR_BLUE}{'=' * 60}{COLOR_RESET}")
     if active_model:
         formatted = format_model_name(active_model)
         print(f"Active Model: {formatted}")
@@ -542,21 +566,23 @@ def get_token_limit(plan, blocks=None):
     return limits.get(plan, 7000)
 
 
-def update_switch_state(tokens_used, token_limit, plan, switched, shown, blocks):
+def update_switch_state(
+    tokens_used: int, plan: str, blocks, state: MonitorState
+) -> tuple[str, bool]:
     """Update plan based on usage and determine notification state."""
-    if tokens_used > token_limit and plan == "pro":
+    if tokens_used > state.token_limit and plan == "pro":
         new_limit = get_token_limit("custom_max", blocks)
-        if new_limit > token_limit:
-            token_limit = new_limit
+        if new_limit > state.token_limit:
+            state.token_limit = new_limit
             plan = "custom_max"
-            if not switched:
-                switched = True
+            if not state.switched_to_custom_max:
+                state.switched_to_custom_max = True
 
-    show = switched and not shown
+    show = state.switched_to_custom_max and not state.switch_notification_shown
     if show:
-        shown = True
+        state.switch_notification_shown = True
 
-    return plan, token_limit, switched, shown, show
+    return plan, show
 
 
 def find_active_block(blocks):
@@ -567,34 +593,21 @@ def find_active_block(blocks):
     return None
 
 
-def collect_session_stats(
+def collect_session_stats(  # pylint: disable=too-many-locals
     args,
-    token_limit,
     data_blocks,
     session_info,
-    switched_to_custom_max,
-    switch_notification_shown,
-):
+    state: MonitorState,
+) -> tuple[dict | None, bool]:
     """Return metrics and updated state for the active session."""
     active_block = find_active_block(data_blocks)
     if not active_block:
-        return None, token_limit, switched_to_custom_max, switch_notification_shown, False
+        return None, False
 
     tokens_used = active_block.get("totalTokens", 0)
 
-    (
-        args.plan,
-        token_limit,
-        switched_to_custom_max,
-        switch_notification_shown,
-        show_switch_notification,
-    ) = update_switch_state(
-        tokens_used,
-        token_limit,
-        args.plan,
-        switched_to_custom_max,
-        switch_notification_shown,
-        data_blocks,
+    args.plan, show_switch_notification = update_switch_state(
+        tokens_used, args.plan, data_blocks, state
     )
 
     active_model = active_block.get("model")
@@ -609,13 +622,11 @@ def collect_session_stats(
 
     burn_rate = calculate_hourly_burn_rate(data_blocks, current_time)
     reset_time = get_next_reset_time(current_time, args.reset_hour, args.timezone)
-    time_to_reset = reset_time - current_time
-    minutes_to_reset = time_to_reset.total_seconds() / 60
+    minutes_to_reset = (reset_time - current_time).total_seconds() / 60
 
-    tokens_left = token_limit - tokens_used
+    tokens_left = state.token_limit - tokens_used
     if burn_rate > 0 and tokens_left > 0:
-        minutes_to_depletion = tokens_left / burn_rate
-        predicted_end_time = current_time + timedelta(minutes=minutes_to_depletion)
+        predicted_end_time = current_time + timedelta(minutes=tokens_left / burn_rate)
     else:
         predicted_end_time = reset_time
 
@@ -633,113 +644,94 @@ def collect_session_stats(
         "current_time": current_time,
         "show_switch_notification": show_switch_notification,
     }
-    return metrics, token_limit, switched_to_custom_max, switch_notification_shown, True
+    return metrics, True
 
 
 def display_plain_report(metrics, token_limit, args):
     """Print a plain text status update using collected metrics."""
-    tokens_used = metrics["tokens_used"]
-    tokens_left = metrics["tokens_left"]
-    active_model = metrics["active_model"]
-    model_usage = metrics["model_usage"]
-    burn_rate = metrics["burn_rate"]
-    reset_time = metrics["reset_time"]
-    predicted_end_time = metrics["predicted_end_time"]
-    time_since_reset = metrics["time_since_reset"]
-    show_switch_notification = metrics["show_switch_notification"]
+    usage_percentage = metrics["tokens_used"] / token_limit * 100 if token_limit > 0 else 0
 
-    usage_percentage = (tokens_used / token_limit) * 100 if token_limit > 0 else 0
-
-    cyan = "\033[96m"
-    red = "\033[91m"
-    yellow = "\033[93m"
-    white = "\033[97m"
-    gray = "\033[90m"
-    reset = "\033[0m"
-
-    print_header(active_model)
+    print_header(metrics["active_model"])
 
     print(
-        f"📊 {white}Token Usage:{reset}    "
+        f"📊 {COLOR_WHITE}Token Usage:{COLOR_RESET}    "
         f"{create_token_progress_bar(usage_percentage, plain=True)}"
     )
     print()
 
     print(
-        f"⏳ {white}Time to Reset:{reset}  "
-        f"{create_time_progress_bar(time_since_reset, 300, plain=True)}"
+        f"⏳ {COLOR_WHITE}Time to Reset:{COLOR_RESET}  "
+        f"{create_time_progress_bar(metrics['time_since_reset'], 300, plain=True)}"
     )
     print()
 
     print(
-        f"🎯 {white}Tokens:{reset}         "
-        f"{white}{tokens_used:,}{reset} / {gray}~{token_limit:,}{reset}"
-        f" ({cyan}{tokens_left:,} left{reset})"
+        f"🎯 {COLOR_WHITE}Tokens:{COLOR_RESET}         "
+        f"{COLOR_WHITE}{metrics['tokens_used']:,}{COLOR_RESET} / "
+        f"{COLOR_GRAY}~{token_limit:,}{COLOR_RESET}"
+        f" ({COLOR_CYAN}{metrics['tokens_left']:,} left{COLOR_RESET})"
     )
     print(
-        f"🔥 {white}Burn Rate:{reset}      "
-        f"{yellow}{burn_rate:.1f}{reset} {gray}tokens/min{reset}"
+        f"🔥 {COLOR_WHITE}Burn Rate:{COLOR_RESET}      "
+        f"{COLOR_YELLOW}{metrics['burn_rate']:.1f}{COLOR_RESET} {COLOR_GRAY}tokens/min{COLOR_RESET}"
     )
-    if model_usage and len(model_usage) > 1:
-        ratio_bar = create_model_ratio_bar(model_usage, plain=True)
+    if metrics["model_usage"] and len(metrics["model_usage"]) > 1:
+        ratio_bar = create_model_ratio_bar(metrics["model_usage"], plain=True)
         print(f"💠 {ratio_bar}")
         print()
-    elif model_usage:
+    elif metrics["model_usage"]:
         print("\n💠 Model Usage:")
-        total_models_tokens = sum(v["total"] for v in model_usage.values())
-        for m, md in model_usage.items():
-            progress_line = create_model_progress_bar(
-                m,
-                md["total"],
-                total_models_tokens,
-                plain=True,
+        total_models_tokens = sum(v["total"] for v in metrics["model_usage"].values())
+        for m, md in metrics["model_usage"].items():
+            usage_info = ModelUsageInfo(
+                used=md["total"],
+                total=total_models_tokens,
                 input_tokens=md.get("input_tokens"),
                 output_tokens=md.get("output_tokens"),
             )
+            progress_line = create_model_progress_bar(m, usage_info, plain=True)
             print(f"    {progress_line}")
         print()
     else:
         print()
 
     local_tz = resolve_timezone(args.timezone)
-    predicted_end_local = predicted_end_time.astimezone(local_tz)
-    reset_time_local = reset_time.astimezone(local_tz)
-
-    predicted_end_str = predicted_end_local.strftime("%H:%M")
-    reset_time_str = reset_time_local.strftime("%H:%M")
-    print(f"🏁 {white}Predicted End:{reset} {predicted_end_str}")
-    print(f"🔄 {white}Token Reset:{reset}   {reset_time_str}")
+    predicted_end_str = metrics["predicted_end_time"].astimezone(local_tz).strftime("%H:%M")
+    reset_time_str = metrics["reset_time"].astimezone(local_tz).strftime("%H:%M")
+    print(f"🏁 {COLOR_WHITE}Predicted End:{COLOR_RESET} {predicted_end_str}")
+    print(f"🔄 {COLOR_WHITE}Token Reset:{COLOR_RESET}   {reset_time_str}")
     print()
 
-    show_exceed_notification = tokens_used > token_limit
-    if show_switch_notification:
+    if metrics["show_switch_notification"]:
         print(
-            f"🔄 {yellow}Tokens exceeded Pro limit - switched to "
-            f"custom_max ({token_limit:,}){reset}"
+            f"🔄 {COLOR_YELLOW}Tokens exceeded Pro limit - switched to "
+            f"custom_max ({token_limit:,}){COLOR_RESET}"
         )
         print()
-
-    if show_exceed_notification:
-        print(f"🚨 {red}TOKENS EXCEEDED MAX LIMIT! " f"({tokens_used:,} > {token_limit:,}){reset}")
+    if metrics["tokens_used"] > token_limit:
+        print(
+            f"🚨 {COLOR_RED}TOKENS EXCEEDED MAX LIMIT! "
+            f"({metrics['tokens_used']:,} > {token_limit:,}){COLOR_RESET}"
+        )
         print()
-
-    if predicted_end_time < reset_time:
-        print(f"⚠️  {red}Tokens will run out BEFORE reset!{reset}")
+    if metrics["predicted_end_time"] < metrics["reset_time"]:
+        print(f"⚠️  {COLOR_RED}Tokens will run out BEFORE reset!{COLOR_RESET}")
         print()
-
     current_time_str = datetime.now().strftime("%H:%M:%S")
     print(
-        f"⏰ {gray}{current_time_str}{reset} 📝 {cyan}Smooth sailing...{reset} | "
-        f"{gray}Ctrl+C to exit{reset} 🟨"
+        (
+            f"⏰ {COLOR_GRAY}{current_time_str}{COLOR_RESET} 📝 "
+            f"{COLOR_CYAN}Smooth sailing...{COLOR_RESET} | "
+            f"{COLOR_GRAY}Ctrl+C to exit{COLOR_RESET} 🟨"
+        )
     )
 
     print("\033[J", end="", flush=True)
 
 
-def build_rich_panel(metrics, token_limit, args):
+def build_rich_panel(metrics, token_limit, args):  # pylint: disable=too-many-locals
     """Return a rich Panel object for the current metrics."""
     tokens_used = metrics["tokens_used"]
-    tokens_left = metrics["tokens_left"]
     active_model = metrics["active_model"]
     model_usage = metrics["model_usage"]
     burn_rate = metrics["burn_rate"]
@@ -751,10 +743,8 @@ def build_rich_panel(metrics, token_limit, args):
     usage_percentage = (tokens_used / token_limit) * 100 if token_limit > 0 else 0
 
     local_tz = resolve_timezone(args.timezone)
-    predicted_end_local = predicted_end_time.astimezone(local_tz)
-    reset_time_local = reset_time.astimezone(local_tz)
-    predicted_end_str = predicted_end_local.strftime("%H:%M")
-    reset_time_str = reset_time_local.strftime("%H:%M")
+    predicted_end_str = predicted_end_time.astimezone(local_tz).strftime("%H:%M")
+    reset_time_str = reset_time.astimezone(local_tz).strftime("%H:%M")
 
     body = [Text("CLAUDE TOKEN MONITOR", style="bold cyan")]
     if active_model:
@@ -768,7 +758,7 @@ def build_rich_panel(metrics, token_limit, args):
 
     body.append(
         Text(
-            f"🎯 Tokens: {tokens_used:,} / ~{token_limit:,} ({tokens_left:,} left)",
+            f"🎯 Tokens: {tokens_used:,} / ~{token_limit:,} ({metrics['tokens_left']:,} left)",
             style="white",
         )
     )
@@ -780,22 +770,20 @@ def build_rich_panel(metrics, token_limit, args):
             body.append(Text(""))
         else:
             body.append(Text("\n💠 Model Usage:", style="bold"))
-            total_models_tokens = sum(v["total"] for v in model_usage.values())
+            total_tokens = sum(v["total"] for v in model_usage.values())
             for m, md in model_usage.items():
-                progress_line = create_model_progress_bar(
-                    m,
-                    md["total"],
-                    total_models_tokens,
+                usage_info = ModelUsageInfo(
+                    used=md["total"],
+                    total=total_tokens,
                     input_tokens=md.get("input_tokens"),
                     output_tokens=md.get("output_tokens"),
                 )
-                body.append(progress_line)
+                body.append(create_model_progress_bar(m, usage_info))
             body.append(Text(""))
 
     body.append(Text(f"🏁 Predicted End: {predicted_end_str}"))
     body.append(Text(f"🔄 Token Reset:   {reset_time_str}"))
 
-    show_exceed_notification = tokens_used > token_limit
     if show_switch_notification:
         body.append(
             Text(
@@ -803,7 +791,7 @@ def build_rich_panel(metrics, token_limit, args):
                 style="yellow",
             )
         )
-    if show_exceed_notification:
+    if tokens_used > token_limit:
         body.append(
             Text(
                 f"🚨 TOKENS EXCEEDED MAX LIMIT! ({tokens_used:,} > {token_limit:,})",
@@ -824,44 +812,31 @@ def build_rich_panel(metrics, token_limit, args):
     return Panel(Group(*body))
 
 
-def run_plain_once(
-    args,
-    token_limit,
-    data,
-    session_info,
-    *,
-    switched_to_custom_max=False,
-    switch_notification_shown=False,
-):
-    """Render a single plain-text update and return updated state."""
+def run_plain_once(args, data, session_info, state: MonitorState) -> None:
+    """Render a single plain-text update."""
     if not data or "blocks" not in data:
         print("Failed to get usage data")
-        return token_limit, switched_to_custom_max, switch_notification_shown
+        return
 
-    metrics, token_limit, switched_to_custom_max, switch_notification_shown, ok = (
-        collect_session_stats(
-            args,
-            token_limit,
-            data["blocks"],
-            session_info,
-            switched_to_custom_max,
-            switch_notification_shown,
-        )
+    metrics, ok = collect_session_stats(
+        args,
+        data["blocks"],
+        session_info,
+        state,
     )
 
     if not ok or metrics is None:
         print("No active session found")
-        return token_limit, switched_to_custom_max, switch_notification_shown
+        return
 
-    display_plain_report(metrics, token_limit, args)
+    display_plain_report(metrics, state.token_limit, args)
 
-    return token_limit, switched_to_custom_max, switch_notification_shown
+    return
 
 
 def run_plain(args, token_limit):
     """Main monitoring loop using plain text output."""
-    switched_to_custom_max = False
-    switch_notification_shown = False
+    state = MonitorState(token_limit)
 
     try:
         os.system("clear" if os.name == "posix" else "cls")
@@ -871,91 +846,65 @@ def run_plain(args, token_limit):
             print("\033[H", end="", flush=True)
             data = run_ccusage()
             session_info = run_ccusage_session()
-            token_limit, switched_to_custom_max, switch_notification_shown = run_plain_once(
-                args,
-                token_limit,
-                data,
-                session_info,
-                switched_to_custom_max=switched_to_custom_max,
-                switch_notification_shown=switch_notification_shown,
-            )
+            run_plain_once(args, data, session_info, state)
             time.sleep(3)
 
     except KeyboardInterrupt:
-        cyan = "\033[96m"
-        reset = "\033[0m"
         print("\033[?25h", end="", flush=True)
-        print(f"\n\n{cyan}Monitoring stopped.{reset}")
+        print(f"\n\n{COLOR_CYAN}Monitoring stopped.{COLOR_RESET}")
         os.system("clear" if os.name == "posix" else "cls")
         sys.exit(0)
-    except Exception:
-        print("\033[?25h", end="", flush=True)
-        raise
 
 
 def run_rich_once(
     args,
-    token_limit,
     data,
     session_info,
-    *,
-    console,
-    switched_to_custom_max=False,
-    switch_notification_shown=False,
-):
+    console: Console,
+    state: MonitorState,
+) -> Panel | None:
     """Render a single rich update and return updated state."""
     if not data or "blocks" not in data:
         console.print("Failed to get usage data")
-        return None, token_limit, switched_to_custom_max, switch_notification_shown
+        return None
 
-    metrics, token_limit, switched_to_custom_max, switch_notification_shown, ok = (
-        collect_session_stats(
-            args,
-            token_limit,
-            data["blocks"],
-            session_info,
-            switched_to_custom_max,
-            switch_notification_shown,
-        )
+    metrics, ok = collect_session_stats(
+        args,
+        data["blocks"],
+        session_info,
+        state,
     )
 
     if not ok or metrics is None:
         console.print("No active session found")
-        return None, token_limit, switched_to_custom_max, switch_notification_shown
+        return None
 
-    panel = build_rich_panel(metrics, token_limit, args)
+    panel = build_rich_panel(metrics, state.token_limit, args)
     console.print(panel)
-    return panel, token_limit, switched_to_custom_max, switch_notification_shown
+    return panel
 
 
 def run_rich(args, token_limit):
     """Monitoring loop using rich output."""
-    switched_to_custom_max = False
-    switch_notification_shown = False
+    state = MonitorState(token_limit)
     console = Console()
     with Live(console=console, refresh_per_second=4, screen=True) as live:
         try:
             while True:
                 data = run_ccusage()
                 session_info = run_ccusage_session()
-                panel, token_limit, switched_to_custom_max, switch_notification_shown = (
-                    run_rich_once(
-                        args,
-                        token_limit,
-                        data,
-                        session_info,
-                        console=console,
-                        switched_to_custom_max=switched_to_custom_max,
-                        switch_notification_shown=switch_notification_shown,
-                    )
+                panel = run_rich_once(
+                    args,
+                    data,
+                    session_info,
+                    console=console,
+                    state=state,
                 )
                 if panel is not None:
                     live.update(panel)
                 time.sleep(3)
         except KeyboardInterrupt:
             console.print("\nMonitoring stopped.", style="cyan")
-        except Exception:
-            raise
 
 
 def main():

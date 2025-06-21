@@ -41,13 +41,15 @@ def test_time_progress_bar_plain_and_rich():
 
 def test_model_progress_bar_plain_and_rich():
     with patch.object(monitor, "RICH_AVAILABLE", False):
-        result = monitor.create_model_progress_bar("claude-opus-4", 50, 100)
+        usage = monitor.ModelUsageInfo(used=50, total=100)
+        result = monitor.create_model_progress_bar("claude-opus-4", usage)
         assert isinstance(result, str)
-        result_plain = monitor.create_model_progress_bar("claude-opus-4", 50, 100, plain=True)
+        result_plain = monitor.create_model_progress_bar("claude-opus-4", usage, plain=True)
         assert isinstance(result_plain, str)
 
     with patch.object(monitor, "RICH_AVAILABLE", True):
-        result_rich = monitor.create_model_progress_bar("claude-opus-4", 50, 100)
+        usage = monitor.ModelUsageInfo(used=50, total=100)
+        result_rich = monitor.create_model_progress_bar("claude-opus-4", usage)
         assert isinstance(result_rich, Progress)
-        result_plain = monitor.create_model_progress_bar("claude-opus-4", 50, 100, plain=True)
+        result_plain = monitor.create_model_progress_bar("claude-opus-4", usage, plain=True)
         assert isinstance(result_plain, str)

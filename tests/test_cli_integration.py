@@ -33,7 +33,8 @@ def test_run_plain_once_basic(capsys):
         ]
     }
     args = Namespace(plan="pro", reset_hour=None, timezone="UTC", plain=True)
-    monitor.run_plain_once(args, 7000, data, session_info)
+    state = monitor.MonitorState(token_limit=7000)
+    monitor.run_plain_once(args, data, session_info, state)
 
     captured = capsys.readouterr().out
     assert "CLAUDE TOKEN MONITOR" in captured
@@ -62,7 +63,8 @@ def test_run_plain_once_no_start_time(capsys):
     }
     args = Namespace(plan="pro", reset_hour=None, timezone="UTC", plain=True)
     with patch.object(monitor, "get_next_reset_time", return_value=datetime.now()):
-        monitor.run_plain_once(args, 7000, data, session_info)
+        state = monitor.MonitorState(token_limit=7000)
+        monitor.run_plain_once(args, data, session_info, state)
 
     captured = capsys.readouterr().out
     assert "CLAUDE TOKEN MONITOR" in captured
