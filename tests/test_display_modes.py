@@ -37,3 +37,21 @@ def test_time_progress_bar_plain_and_rich():
         assert isinstance(result_rich, Progress)
         result_plain = monitor.create_time_progress_bar(5, 10, plain=True)
         assert isinstance(result_plain, str)
+
+
+def test_model_progress_bar_plain_and_rich():
+    with patch.object(monitor, "RICH_AVAILABLE", False):
+        result = monitor.create_model_progress_bar("claude-opus-4", 50, 100)
+        assert isinstance(result, str)
+        result_plain = monitor.create_model_progress_bar(
+            "claude-opus-4", 50, 100, plain=True
+        )
+        assert isinstance(result_plain, str)
+
+    with patch.object(monitor, "RICH_AVAILABLE", True):
+        result_rich = monitor.create_model_progress_bar("claude-opus-4", 50, 100)
+        assert isinstance(result_rich, Progress)
+        result_plain = monitor.create_model_progress_bar(
+            "claude-opus-4", 50, 100, plain=True
+        )
+        assert isinstance(result_plain, str)

@@ -198,6 +198,14 @@ claude-monitor
 The monitor also displays per-model token totals for the current session.
 Make sure the `ccusage` CLI is installed (`npm install -g ccusage`).
 
+Example output with per-model bars:
+
+```text
+💠 Model Usage:
+    claude-sonnet-4  [██████████░░░░░░░░░░░░░░░░] 60.0% 6,000 tokens ($0.18)
+    claude-opus-4    [███░░░░░░░░░░░░░░░░░░░░░░] 10.0% 1,000 tokens ($0.07)
+```
+
 ### Configuration Options
 
 #### Specify Your Plan

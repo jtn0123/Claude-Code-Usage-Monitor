@@ -142,6 +142,29 @@ def create_time_progress_bar(elapsed_minutes, total_minutes, width=50, plain=Fal
     return progress
 
 
+def create_model_progress_bar(model, used, total, width=40, plain=False):
+    """Return a per-model progress bar including token and cost summary."""
+    percentage = (used / total * 100) if total > 0 else 0.0
+    summary = format_model_usage(model, used, total)
+    if plain or not RICH_AVAILABLE:
+        filled = int(width * percentage / 100)
+        green_bar = "█" * filled
+        red_bar = "░" * (width - filled)
+        green = "\033[92m"
+        red = "\033[91m"
+        reset = "\033[0m"
+        return f"{model:<15} [{green}{green_bar}{red}{red_bar}{reset}] {summary}"
+
+    progress = Progress(
+        TextColumn(f"{model:<15}"),
+        BarColumn(bar_width=width, complete_style="bright_green"),
+        TextColumn(summary),
+        expand=False,
+    )
+    progress.add_task("", total=100, completed=percentage)
+    return progress
+
+
 # Pricing data source used by the upstream `ccusage` project
 LITELLM_PRICING_URL = (
     "https://raw.githubusercontent.com/BerriAI/litellm/main/"
@@ -577,8 +600,10 @@ def run_plain(args, token_limit):
                 print("\n💠 Model Usage:")
                 total_models_tokens = sum(model_usage.values())
                 for m, t in model_usage.items():
-                    summary = format_model_usage(m, t, total_models_tokens)
-                    print(f"    {m:<15} {summary}")
+                    bar = create_model_progress_bar(
+                        m, t, total_models_tokens, plain=True
+                    )
+                    print(f"    {bar}")
                 print()
             else:
                 print()
@@ -741,8 +766,8 @@ def run_rich(args, token_limit):
                 body.append(Text("\n💠 Model Usage:", style="bold"))
                 total_models_tokens = sum(model_usage.values())
                 for m, t in model_usage.items():
-                    summary = format_model_usage(m, t, total_models_tokens)
-                    body.append(Text(f"    {m:<15} {summary}"))
+                    bar = create_model_progress_bar(m, t, total_models_tokens)
+                    body.append(bar)
                 body.append(Text(""))
             else:
                 body.append(Text(""))
