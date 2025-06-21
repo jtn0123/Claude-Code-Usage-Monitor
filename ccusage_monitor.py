@@ -810,19 +810,24 @@ def run_rich_once(
     predicted_end_str = predicted_end_local.strftime("%H:%M")
     reset_time_str = reset_time_local.strftime("%H:%M")
 
-    body = [
-        Text("CLAUDE TOKEN MONITOR", style="bold cyan"),
-        create_token_progress_bar(usage_percentage),
-        create_time_progress_bar(time_since_reset, 300),
+    body = [Text("CLAUDE TOKEN MONITOR", style="bold cyan")]
+
+    if active_model:
+        body.append(Text(f"Active Model: {format_model_name(active_model)}"))
+
+    body.append(Text("📊 Token Usage:", style="bold"))
+    body.append(create_token_progress_bar(usage_percentage))
+
+    body.append(Text("⏳ Time to Reset:", style="bold"))
+    body.append(create_time_progress_bar(time_since_reset, 300))
+
+    body.append(
         Text(
             f"🎯 Tokens: {tokens_used:,} / ~{token_limit:,} ({tokens_left:,} left)",
             style="white",
-        ),
-        Text(f"🔥 Burn Rate: {burn_rate:.1f} tokens/min", style="yellow"),
-    ]
-
-    if active_model:
-        body.insert(1, Text(f"Active Model: {format_model_name(active_model)}"))
+        )
+    )
+    body.append(Text(f"🔥 Burn Rate: {burn_rate:.1f} tokens/min", style="yellow"))
 
     if model_usage and len(model_usage) > 1:
         bar = create_model_ratio_bar(model_usage)
