@@ -62,3 +62,22 @@ def test_get_session_model_usage_no_match():
     }
     mapping = monitor.get_session_model_usage(active_block, session_info)
     assert mapping == {"claude-opus-4": 75}
+
+
+def test_format_model_usage_summary():
+    tokens = 5000
+    total_tokens = 10000
+    summary = monitor.format_model_usage("claude-opus-4", tokens, total_tokens)
+    expected_cost = tokens * (
+        monitor.MODEL_COST_PER_MILLION["claude-opus-4"] / 1_000_000
+    )
+    expected_cost_str = f"${expected_cost:.2f}"
+    assert "50.0%" in summary
+    assert "5,000" in summary
+    assert expected_cost_str in summary
+
+
+def test_format_model_usage_unknown_model():
+    summary = monitor.format_model_usage("unknown-model", 100, 1000)
+    assert "10.0%" in summary
+    assert "$0.00" in summary
