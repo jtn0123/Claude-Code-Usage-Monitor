@@ -7,7 +7,7 @@ import time
 from datetime import datetime, timedelta
 import os
 import argparse
-import pytz
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 
 def run_ccusage():
@@ -240,17 +240,17 @@ def get_next_reset_time(
     """
     # Convert to specified timezone
     try:
-        target_tz = pytz.timezone(timezone_str)
-    except pytz.exceptions.UnknownTimeZoneError:
+        target_tz = ZoneInfo(timezone_str)
+    except ZoneInfoNotFoundError:
         print(f"Warning: Unknown timezone '{timezone_str}', using Europe/Warsaw")
-        target_tz = pytz.timezone("Europe/Warsaw")
+        target_tz = ZoneInfo("Europe/Warsaw")
 
     # If current_time is timezone-aware, convert to target timezone
     if current_time.tzinfo is not None:
         target_time = current_time.astimezone(target_tz)
     else:
         # Assume current_time is in target timezone if not specified
-        target_time = target_tz.localize(current_time)
+        target_time = current_time.replace(tzinfo=target_tz)
 
     if custom_reset_hour is not None:
         # Use single daily reset at custom hour
@@ -278,11 +278,9 @@ def get_next_reset_time(
         next_reset_date = target_time.date()
 
     # Create next reset datetime in target timezone
-    next_reset = target_tz.localize(
-        datetime.combine(
-            next_reset_date, datetime.min.time().replace(hour=next_reset_hour)
-        ),
-        is_dst=None,
+    next_reset = datetime.combine(
+        next_reset_date,
+        datetime.min.time().replace(hour=next_reset_hour, tzinfo=target_tz),
     )
 
     # Convert back to the original timezone if needed
@@ -507,9 +505,9 @@ def main():
 
             # Predictions - convert to configured timezone for display
             try:
-                local_tz = pytz.timezone(args.timezone)
-            except pytz.exceptions.UnknownTimeZoneError:
-                local_tz = pytz.timezone("Europe/Warsaw")
+                local_tz = ZoneInfo(args.timezone)
+            except ZoneInfoNotFoundError:
+                local_tz = ZoneInfo("Europe/Warsaw")
             predicted_end_local = predicted_end_time.astimezone(local_tz)
             reset_time_local = reset_time.astimezone(local_tz)
 

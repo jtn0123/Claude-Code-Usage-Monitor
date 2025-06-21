@@ -52,19 +52,10 @@ npm install -g ccusage
 
 ### Python Dependencies Missing
 
-**Error Message**:
-```
-ModuleNotFoundError: No module named 'pytz'
-```
-
-**Solution**:
+This tool now uses Python's built-in `zoneinfo` module, available in Python 3.9+
+so no external packages are required. Verify your Python version with:
 ```bash
-# Install required dependencies
-pip install pytz
-
-# For virtual environment users:
-source venv/bin/activate  # Linux/Mac
-pip install pytz
+python --version
 ```
 
 ### Permission Denied (Linux/Mac)
@@ -539,7 +530,6 @@ If all else fails, complete reset:
 ```bash
 # 1. Uninstall everything
 npm uninstall -g ccusage
-pip uninstall pytz
 
 # 2. Clear Python cache
 find . -name "*.pyc" -delete
@@ -552,7 +542,6 @@ rm -rf venv
 npm install -g ccusage
 python3 -m venv venv
 source venv/bin/activate
-pip install pytz
 
 # 5. Test basic functionality
 ccusage --version

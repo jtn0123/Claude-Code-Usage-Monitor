@@ -40,9 +40,6 @@ python3 -m venv venv
 source venv/bin/activate  # Linux/Mac
 # venv\Scripts\activate   # Windows
 
-# Install dependencies
-pip install pytz
-
 # Install development dependencies (when available)
 pip install pytest black flake8
 
