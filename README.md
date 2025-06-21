@@ -56,6 +56,10 @@ A beautiful real-time terminal monitoring tool for Claude AI token usage. Track 
 
 For immediate testing (not recommended for regular use):
 
+> **Note**: The monitor relies on the separate `ccusage` Node CLI. It is not
+> installed via `requirements.txt`. Install it first with `npm install -g ccusage`
+> and ensure the `ccusage` command is available in your `PATH`.
+
 ```bash
 # Install dependencies
 npm install -g ccusage
@@ -130,6 +134,9 @@ ccusage --version  # verify version is >=0.7.0
 # 2. Clone the repository
 git clone https://github.com/jtn0123/Claude-Code-Usage-Monitor
 cd Claude-Code-Usage-Monitor
+
+#  `ccusage` is distributed as a Node package, so it is not listed in
+#  `requirements.txt`. Ensure the CLI remains in your PATH after installation.
 
 # 3. Create virtual environment
 python3 -m venv venv
