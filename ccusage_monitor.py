@@ -75,10 +75,7 @@ def get_session_model_usage(active_block, session_info):
         active_start = active_block.get("startTime")
         active_last = active_block.get("lastActivity")
         for s in sessions:
-            if (
-                s.get("startTime") == active_start
-                or s.get("lastActivity") == active_last
-            ):
+            if s.get("startTime") == active_start or s.get("lastActivity") == active_last:
                 target_session = s
                 break
     if not target_session and sessions:
@@ -135,9 +132,7 @@ def create_token_progress_bar(percentage, width=50, plain=False):
 
 def create_time_progress_bar(elapsed_minutes, total_minutes, width=50, plain=False):
     """Create a time progress bar showing time until reset."""
-    percentage = (
-        0 if total_minutes <= 0 else min(100, (elapsed_minutes / total_minutes) * 100)
-    )
+    percentage = 0 if total_minutes <= 0 else min(100, (elapsed_minutes / total_minutes) * 100)
     if plain or not RICH_AVAILABLE:
         filled = int(width * percentage / 100)
         blue_bar = "█" * filled
@@ -198,8 +193,7 @@ def create_model_progress_bar(
 
 # Pricing data source used by the upstream `ccusage` project
 LITELLM_PRICING_URL = (
-    "https://raw.githubusercontent.com/BerriAI/litellm/main/"
-    "model_prices_and_context_window.json"
+    "https://raw.githubusercontent.com/BerriAI/litellm/main/" "model_prices_and_context_window.json"
 )
 
 # Fallback pricing in case fetching from LiteLLM fails
@@ -351,9 +345,7 @@ def calculate_hourly_burn_rate(blocks, current_time):
             # For completed sessions, use actualEndTime or current time
             actual_end_str = block.get("actualEndTime")
             if actual_end_str:
-                session_actual_end = datetime.fromisoformat(
-                    actual_end_str.replace("Z", "+00:00")
-                )
+                session_actual_end = datetime.fromisoformat(actual_end_str.replace("Z", "+00:00"))
             else:
                 session_actual_end = current_time
 
@@ -370,9 +362,7 @@ def calculate_hourly_burn_rate(blocks, current_time):
             continue
 
         # Calculate portion of tokens used in the last hour
-        total_session_duration = (
-            session_actual_end - start_time
-        ).total_seconds() / 60  # minutes
+        total_session_duration = (session_actual_end - start_time).total_seconds() / 60  # minutes
         hour_duration = (
             session_end_in_hour - session_start_in_hour
         ).total_seconds() / 60  # minutes
@@ -386,9 +376,7 @@ def calculate_hourly_burn_rate(blocks, current_time):
     return total_tokens / 60 if total_tokens > 0 else 0
 
 
-def get_next_reset_time(
-    current_time, custom_reset_hour=None, timezone_str="Europe/Warsaw"
-):
+def get_next_reset_time(current_time, custom_reset_hour=None, timezone_str="Europe/Warsaw"):
     """Calculate next token reset time based on fixed 5-hour intervals.
     Default reset times in specified timezone: 04:00, 09:00, 14:00, 18:00, 23:00
     Or use custom reset hour if provided.
@@ -568,17 +556,13 @@ def run_plain(args, token_limit):
                 data["blocks"],
             )
 
-            usage_percentage = (
-                (tokens_used / token_limit) * 100 if token_limit > 0 else 0
-            )
+            usage_percentage = (tokens_used / token_limit) * 100 if token_limit > 0 else 0
             tokens_left = token_limit - tokens_used
 
             # Time calculations
             start_time_str = active_block.get("startTime")
             if start_time_str:
-                start_time = datetime.fromisoformat(
-                    start_time_str.replace("Z", "+00:00")
-                )
+                start_time = datetime.fromisoformat(start_time_str.replace("Z", "+00:00"))
                 current_time = datetime.now(start_time.tzinfo)
             else:
                 pass
@@ -587,9 +571,7 @@ def run_plain(args, token_limit):
             burn_rate = calculate_hourly_burn_rate(data["blocks"], current_time)
 
             # Reset time calculation - use fixed schedule or custom hour with timezone
-            reset_time = get_next_reset_time(
-                current_time, args.reset_hour, args.timezone
-            )
+            reset_time = get_next_reset_time(current_time, args.reset_hour, args.timezone)
 
             # Calculate time to reset
             time_to_reset = reset_time - current_time
@@ -598,9 +580,7 @@ def run_plain(args, token_limit):
             # Predicted end calculation - when tokens will run out based on burn rate
             if burn_rate > 0 and tokens_left > 0:
                 minutes_to_depletion = tokens_left / burn_rate
-                predicted_end_time = current_time + timedelta(
-                    minutes=minutes_to_depletion
-                )
+                predicted_end_time = current_time + timedelta(minutes=minutes_to_depletion)
             else:
                 # If no burn rate or tokens already depleted, use reset time
                 predicted_end_time = reset_time
@@ -765,32 +745,24 @@ def run_rich(args, token_limit):
                 data["blocks"],
             )
 
-            usage_percentage = (
-                (tokens_used / token_limit) * 100 if token_limit > 0 else 0
-            )
+            usage_percentage = (tokens_used / token_limit) * 100 if token_limit > 0 else 0
             tokens_left = token_limit - tokens_used
 
             start_time_str = active_block.get("startTime")
             if start_time_str:
-                start_time = datetime.fromisoformat(
-                    start_time_str.replace("Z", "+00:00")
-                )
+                start_time = datetime.fromisoformat(start_time_str.replace("Z", "+00:00"))
                 current_time = datetime.now(start_time.tzinfo)
             else:
                 current_time = datetime.now()
 
             burn_rate = calculate_hourly_burn_rate(data["blocks"], current_time)
-            reset_time = get_next_reset_time(
-                current_time, args.reset_hour, args.timezone
-            )
+            reset_time = get_next_reset_time(current_time, args.reset_hour, args.timezone)
             time_to_reset = reset_time - current_time
             minutes_to_reset = time_to_reset.total_seconds() / 60
 
             if burn_rate > 0 and tokens_left > 0:
                 minutes_to_depletion = tokens_left / burn_rate
-                predicted_end_time = current_time + timedelta(
-                    minutes=minutes_to_depletion
-                )
+                predicted_end_time = current_time + timedelta(minutes=minutes_to_depletion)
             else:
                 predicted_end_time = reset_time
 
