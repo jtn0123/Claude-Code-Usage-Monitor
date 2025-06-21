@@ -12,24 +12,18 @@ spec.loader.exec_module(monitor)
 def test_switch_notification_only_once():
     blocks = [{"isGap": False, "isActive": False, "totalTokens": 10000}]
     plan = "pro"
-    token_limit = monitor.get_token_limit(plan)
-    switched = False
-    shown = False
+    state = monitor.MonitorState(token_limit=monitor.get_token_limit(plan))
 
-    plan, token_limit, switched, shown, show = monitor.update_switch_state(
-        8000, token_limit, plan, switched, shown, blocks
-    )
+    plan, show = monitor.update_switch_state(8000, plan, blocks, state)
     assert plan == "custom_max"
-    assert token_limit == 10000
-    assert switched is True
+    assert state.token_limit == 10000
+    assert state.switched_to_custom_max is True
     assert show is True
-    assert shown is True
+    assert state.switch_notification_shown is True
 
-    plan, token_limit, switched, shown, show = monitor.update_switch_state(
-        9000, token_limit, plan, switched, shown, blocks
-    )
+    plan, show = monitor.update_switch_state(9000, plan, blocks, state)
     assert plan == "custom_max"
-    assert token_limit == 10000
-    assert switched is True
+    assert state.token_limit == 10000
+    assert state.switched_to_custom_max is True
     assert show is False
-    assert shown is True
+    assert state.switch_notification_shown is True

@@ -195,7 +195,8 @@ def test_run_rich_once_combined_bar():
     }
     console = Console(record=True)
     args = Namespace(plan="pro", reset_hour=None, timezone="UTC", plain=False)
-    monitor.run_rich_once(args, 7000, data, session_info, console=console)
+    state = monitor.MonitorState(token_limit=7000)
+    monitor.run_rich_once(args, data, session_info, console=console, state=state)
     output = console.export_text()
     lines = [line for line in output.splitlines() if "Opus" in line and "Sonnet" in line]
     assert lines
