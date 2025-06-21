@@ -42,5 +42,9 @@ We enforce formatting, style and type checks. Configuration lives in `pyproject.
    ```bash
    mypy ccusage_monitor.py tests
    ```
+4. **Pylint** – run additional static analysis.
+   ```bash
+   pylint ccusage_monitor.py
+   ```
 
 All lint commands should finish with no errors. Run them before committing any code.
