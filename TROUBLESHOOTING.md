@@ -52,7 +52,7 @@ npm install -g ccusage
 
 ### Python Dependencies Missing
 
-This tool now uses Python's built-in `zoneinfo` module, available in Python 3.9+
+This tool now uses Python's built-in `zoneinfo` module, available in Python 3.10+
 so no external packages are required. Verify your Python version with:
 ```bash
 python --version
@@ -468,7 +468,7 @@ Clear description of the issue.
 
 **Environment**
 - OS: [Ubuntu 20.04 / Windows 11 / macOS 12]
-- Python: [3.9.7]
+- Python: [3.10.0]
 - Node.js: [16.14.0]
 - ccusage: [1.2.3]
 

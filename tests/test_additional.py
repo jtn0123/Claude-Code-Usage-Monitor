@@ -86,9 +86,10 @@ def test_calculate_hourly_burn_rate():
     assert pytest.approx(rate, rel=1e-6) == 2.5
 
 
-def test_get_next_reset_time_default():
+def test_get_next_reset_time_default(monkeypatch):
     current = datetime(2024, 1, 1, 3, 30)
-    expected = datetime(2024, 1, 1, 4, 0, tzinfo=ZoneInfo("Europe/Warsaw"))
+    monkeypatch.setattr(monitor, "resolve_timezone", lambda tz=None: ZoneInfo("UTC"))
+    expected = datetime(2024, 1, 1, 4, 0, tzinfo=ZoneInfo("UTC"))
     assert monitor.get_next_reset_time(current) == expected
 
 
@@ -145,3 +146,66 @@ def test_get_token_limit_custom_max_default():
         {"isActive": True, "totalTokens": 8000},
     ]
     assert monitor.get_token_limit("custom_max", blocks) == 7000
+
+
+def test_resolve_timezone_explicit():
+    tz = monitor.resolve_timezone("UTC")
+    assert tz.key == "UTC"
+
+
+def test_resolve_timezone_london():
+    tz = monitor.resolve_timezone("Europe/London")
+    assert tz.key == "Europe/London"
+
+
+def test_resolve_timezone_eastern():
+    tz = monitor.resolve_timezone("America/New_York")
+    assert tz.key == "America/New_York"
+
+
+def test_resolve_timezone_fallback(monkeypatch):
+    calls = []
+
+    class DummyZone:
+        def __init__(self, key):
+            self.key = key
+
+    class DummyError(Exception):
+        pass
+
+    def fake_zoneinfo(name):
+        calls.append(name)
+        if name in ("invalid", "localtime"):
+            raise DummyError()
+        return DummyZone(name)
+
+    monkeypatch.setattr(monitor, "ZoneInfo", fake_zoneinfo)
+    monkeypatch.setattr(monitor, "ZoneInfoNotFoundError", DummyError)
+
+    tz = monitor.resolve_timezone("invalid")
+    assert tz.key == "America/Los_Angeles"
+    assert calls == ["invalid", "localtime", "America/Los_Angeles"]
+
+
+def test_resolve_timezone_default_pst(monkeypatch):
+    calls = []
+
+    class DummyZone:
+        def __init__(self, key):
+            self.key = key
+
+    class DummyError(Exception):
+        pass
+
+    def fake_zoneinfo(name):
+        calls.append(name)
+        if name == "localtime":
+            raise DummyError()
+        return DummyZone(name)
+
+    monkeypatch.setattr(monitor, "ZoneInfo", fake_zoneinfo)
+    monkeypatch.setattr(monitor, "ZoneInfoNotFoundError", DummyError)
+
+    tz = monitor.resolve_timezone(None)
+    assert tz.key == "America/Los_Angeles"
+    assert calls == ["localtime", "America/Los_Angeles"]
