@@ -1,17 +1,21 @@
-import os, sys
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+import importlib.util
+from pathlib import Path
 import json
-from unittest.mock import patch, Mock
+from unittest.mock import Mock, patch
 
-
-from ccusage_monitor import run_ccusage_session, get_session_model_usage
+spec = importlib.util.spec_from_file_location(
+    "ccusage_monitor", Path(__file__).resolve().parents[1] / "ccusage_monitor.py"
+)
+assert spec and spec.loader
+monitor = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(monitor)
 
 
 def test_run_ccusage_session_parses_json():
     mock_output = json.dumps({"sessions": []})
     mock_completed = Mock(stdout=mock_output)
-    with patch('subprocess.run', return_value=mock_completed) as run_mock:
-        result = run_ccusage_session()
+    with patch("subprocess.run", return_value=mock_completed) as run_mock:
+        result = monitor.run_ccusage_session()
         run_mock.assert_called_once()
         assert result == {"sessions": []}
 
@@ -33,7 +37,7 @@ def test_get_session_model_usage_by_id():
             }
         ]
     }
-    mapping = get_session_model_usage(active_block, session_info)
+    mapping = monitor.get_session_model_usage(active_block, session_info)
     assert mapping == {"claude-sonnet-4": 1000, "claude-opus-4": 500}
 
 
@@ -47,18 +51,14 @@ def test_get_session_model_usage_no_match():
             {
                 "sessionId": "s1",
                 "lastActivity": "2024-01-01T00:10:00Z",
-                "modelBreakdowns": [
-                    {"model": "claude-sonnet-4", "totalTokens": 50}
-                ],
+                "modelBreakdowns": [{"model": "claude-sonnet-4", "totalTokens": 50}],
             },
             {
                 "sessionId": "s2",
                 "lastActivity": "2024-01-02T00:20:00Z",
-                "modelBreakdowns": [
-                    {"model": "claude-opus-4", "totalTokens": 75}
-                ],
+                "modelBreakdowns": [{"model": "claude-opus-4", "totalTokens": 75}],
             },
         ]
     }
-    mapping = get_session_model_usage(active_block, session_info)
+    mapping = monitor.get_session_model_usage(active_block, session_info)
     assert mapping == {"claude-opus-4": 75}
