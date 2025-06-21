@@ -1,7 +1,7 @@
 import importlib.util
 from pathlib import Path
 from unittest.mock import patch
-import sys
+import argparse
 
 spec = importlib.util.spec_from_file_location(
     "ccusage_monitor", Path(__file__).resolve().parents[1] / "ccusage_monitor.py"
@@ -11,11 +11,9 @@ monitor = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(monitor)
 
 
-@patch("os.system")
-@patch("time.sleep", side_effect=KeyboardInterrupt)
 @patch.object(monitor, "run_ccusage")
 @patch.object(monitor, "run_ccusage_session")
-def test_main_plain_mode_once(mock_session, mock_usage, mock_sleep, mock_os, capsys):
+def test_process_snapshot_plain(mock_session, mock_usage, capsys):
     mock_usage.return_value = {
         "blocks": [
             {
@@ -35,12 +33,10 @@ def test_main_plain_mode_once(mock_session, mock_usage, mock_sleep, mock_os, cap
             }
         ]
     }
-    with patch.object(sys, "argv", ["prog", "--plain"]):
-        try:
-            monitor.main()
-        except SystemExit:
-            pass
-
-    captured = capsys.readouterr().out
-    assert "CLAUDE TOKEN MONITOR" in captured
-    assert "Token Usage" in captured
+    args = argparse.Namespace(plan="pro", reset_hour=None, timezone="Europe/Warsaw", plain=True)
+    token_limit = monitor.get_token_limit(args.plan)
+    output, token_limit, _, _ = monitor.process_snapshot(
+        args, token_limit, False, False, use_rich=False
+    )
+    assert "CLAUDE TOKEN MONITOR" in output
+    assert "Token Usage" in output
