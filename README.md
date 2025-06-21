@@ -1,6 +1,6 @@
 # 🎯 Claude Code Usage Monitor
 
-[![Python Version](https://img.shields.io/badge/python-3.9+-blue.svg)](https://python.org)
+[![Python Version](https://img.shields.io/badge/python-3.10+-blue.svg)](https://python.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](http://makeapullrequest.com)
 
@@ -77,7 +77,7 @@ python ccusage_monitor.py
 
 #### Prerequisites
 
-1. **Python 3.9+** installed on your system
+1. **Python 3.10+** installed on your system
 2. **Node.js** for ccusage CLI tool
 
 ### Virtual Environment Setup
@@ -246,7 +246,9 @@ Example output with per-model bars:
 
 #### Timezone Configuration
 
-The default timezone is **Europe/Warsaw**. Change it to any valid timezone:
+By default the monitor uses your system timezone (falling back to Pacific
+Standard Time if detection fails). The `--timezone` flag lets you override this
+auto-detected setting:
 
 ```bash
 # Use US Eastern Time
@@ -531,7 +533,7 @@ The auto-detection system:
 
 3. **Timezone Awareness**
    ```bash
-   # Always use your actual timezone
+   # Override the detected timezone
    ./ccusage_monitor.py --timezone Europe/Warsaw
    ```
    - Accurate reset time predictions

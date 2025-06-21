@@ -22,6 +22,25 @@ except Exception:  # pragma: no cover
     RICH_AVAILABLE = False
 
 
+def resolve_timezone(tz_name: str | None) -> ZoneInfo:
+    """Return a ``ZoneInfo`` object for the given timezone name.
+
+    If ``tz_name`` is ``None`` or invalid, attempt to use the system timezone
+    (``"localtime"``). If that lookup fails, fall back to Pacific Standard Time
+    (``"America/Los_Angeles"``).
+    """
+    if tz_name:
+        try:
+            return ZoneInfo(tz_name)
+        except ZoneInfoNotFoundError:
+            print(f"Warning: Unknown timezone '{tz_name}', using system timezone")
+    try:
+        return ZoneInfo("localtime")
+    except ZoneInfoNotFoundError:
+        print("Warning: Unable to detect system timezone, using PST")
+        return ZoneInfo("America/Los_Angeles")
+
+
 def run_ccusage():
     """Execute ccusage blocks --json command and return parsed JSON data."""
     try:
@@ -417,17 +436,13 @@ def calculate_hourly_burn_rate(blocks, current_time):
     return total_tokens / 60 if total_tokens > 0 else 0
 
 
-def get_next_reset_time(current_time, custom_reset_hour=None, timezone_str="Europe/Warsaw"):
+def get_next_reset_time(current_time, custom_reset_hour=None, timezone_str=None):
     """Calculate next token reset time based on fixed 5-hour intervals.
     Default reset times in specified timezone: 04:00, 09:00, 14:00, 18:00, 23:00
     Or use custom reset hour if provided.
     """
     # Convert to specified timezone
-    try:
-        target_tz = ZoneInfo(timezone_str)
-    except ZoneInfoNotFoundError:
-        print(f"Warning: Unknown timezone '{timezone_str}', using Europe/Warsaw")
-        target_tz = ZoneInfo("Europe/Warsaw")
+    target_tz = resolve_timezone(timezone_str)
 
     # If current_time is timezone-aware, convert to target timezone
     if current_time.tzinfo is not None:
@@ -495,10 +510,9 @@ def parse_args():
     parser.add_argument(
         "--timezone",
         type=str,
-        default="Europe/Warsaw",
         help=(
-            "Timezone for reset times (default: Europe/Warsaw). "
-            "Examples: US/Eastern, Asia/Tokyo, UTC"
+            "Timezone for reset times. Defaults to the system timezone, "
+            "falling back to Pacific Standard Time if detection fails."
         ),
     )
     parser.add_argument(
@@ -659,10 +673,7 @@ def run_plain_once(
     else:
         print()
 
-    try:
-        local_tz = ZoneInfo(args.timezone)
-    except ZoneInfoNotFoundError:
-        local_tz = ZoneInfo("Europe/Warsaw")
+    local_tz = resolve_timezone(args.timezone)
     predicted_end_local = predicted_end_time.astimezone(local_tz)
     reset_time_local = reset_time.astimezone(local_tz)
 
@@ -801,10 +812,7 @@ def run_rich_once(
 
     time_since_reset = max(0, 300 - minutes_to_reset)
 
-    try:
-        local_tz = ZoneInfo(args.timezone)
-    except ZoneInfoNotFoundError:
-        local_tz = ZoneInfo("Europe/Warsaw")
+    local_tz = resolve_timezone(args.timezone)
     predicted_end_local = predicted_end_time.astimezone(local_tz)
     reset_time_local = reset_time.astimezone(local_tz)
     predicted_end_str = predicted_end_local.strftime("%H:%M")
