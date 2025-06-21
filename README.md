@@ -58,11 +58,12 @@ For immediate testing (not recommended for regular use):
 ```bash
 # Install dependencies
 npm install -g ccusage
-pip install pytz
+
 
 # Clone and run
 git clone https://github.com/Maciek-roboblog/Claude-Code-Usage-Monitor.git
 cd Claude-Code-Usage-Monitor
+pip install -r requirements.txt
 python ccusage_monitor.py
 ```
 
@@ -138,7 +139,8 @@ source venv/bin/activate
 # venv\Scripts\activate
 
 # 5. Install Python dependencies
-pip install pytz
+pip install -r requirements.txt
+
 
 # 6. Make script executable (Linux/Mac only)
 chmod +x ccusage_monitor.py
@@ -476,7 +478,7 @@ The auto-detection system:
    # Production setup with isolation
    python3 -m venv venv
    source venv/bin/activate
-   pip install pytz
+   
    ```
    - Prevents dependency conflicts
    - Clean uninstallation
