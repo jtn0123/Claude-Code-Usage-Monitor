@@ -2,6 +2,8 @@ import importlib.util
 from pathlib import Path
 import json
 from unittest.mock import Mock, patch
+from argparse import Namespace
+from rich.console import Console
 
 spec = importlib.util.spec_from_file_location(
     "ccusage_monitor", Path(__file__).resolve().parents[1] / "ccusage_monitor.py"
@@ -156,3 +158,44 @@ def test_get_model_pricing_fallback():
     with patch("urllib.request.urlopen", side_effect=Exception):
         pricing = monitor.get_model_pricing("claude-opus-4")
     assert pricing == monitor.DEFAULT_MODEL_PRICING["claude-opus-4"]
+
+
+def test_create_model_ratio_bar_plain():
+    usage = {
+        "claude-opus-4": {"total": 70},
+        "claude-sonnet-4": {"total": 30},
+    }
+    bar = monitor.create_model_ratio_bar(usage, width=20, plain=True)
+    assert bar.count("█") == 20
+    assert "Opus" in bar and "Sonnet" in bar
+
+
+def test_run_rich_once_combined_bar():
+    data = {
+        "blocks": [
+            {
+                "isActive": True,
+                "startTime": "2024-01-01T00:00:00Z",
+                "model": "claude-opus-4",
+                "totalTokens": 1000,
+                "sessionId": "abc",
+            }
+        ]
+    }
+    session_info = {
+        "sessions": [
+            {
+                "sessionId": "abc",
+                "modelBreakdowns": [
+                    {"model": "claude-opus-4", "totalTokens": 700},
+                    {"model": "claude-sonnet-4", "totalTokens": 300},
+                ],
+            }
+        ]
+    }
+    console = Console(record=True)
+    args = Namespace(plan="pro", reset_hour=None, timezone="UTC", plain=False)
+    monitor.run_rich_once(args, 7000, data, session_info, console=console)
+    output = console.export_text()
+    lines = [l for l in output.splitlines() if "Opus" in l and "Sonnet" in l]
+    assert lines
