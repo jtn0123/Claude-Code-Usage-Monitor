@@ -565,7 +565,7 @@ def run_plain(args, token_limit):
                 start_time = datetime.fromisoformat(start_time_str.replace("Z", "+00:00"))
                 current_time = datetime.now(start_time.tzinfo)
             else:
-                pass
+                current_time = datetime.now()
 
             # Calculate burn rate from ALL sessions in the last hour
             burn_rate = calculate_hourly_burn_rate(data["blocks"], current_time)

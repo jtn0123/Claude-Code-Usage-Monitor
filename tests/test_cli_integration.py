@@ -1,6 +1,7 @@
 import importlib.util
 from pathlib import Path
 from unittest.mock import patch
+from datetime import datetime
 import sys
 
 spec = importlib.util.spec_from_file_location(
@@ -21,6 +22,44 @@ def test_main_plain_mode_once(mock_session, mock_usage, mock_sleep, mock_os, cap
             {
                 "isActive": True,
                 "startTime": "2024-01-01T00:00:00Z",
+                "model": "claude-opus-4",
+                "totalTokens": 1000,
+                "sessionId": "abc123",
+            }
+        ]
+    }
+    mock_session.return_value = {
+        "sessions": [
+            {
+                "sessionId": "abc123",
+                "modelBreakdowns": [{"model": "claude-opus-4", "totalTokens": 1000}],
+            }
+        ]
+    }
+    with patch.object(sys, "argv", ["prog", "--plain"]):
+        try:
+            monitor.main()
+        except SystemExit:
+            pass
+
+    captured = capsys.readouterr().out
+    assert "CLAUDE TOKEN MONITOR" in captured
+    assert "Token Usage" in captured
+
+
+@patch("os.system")
+@patch("time.sleep", side_effect=KeyboardInterrupt)
+@patch.object(monitor, "get_next_reset_time", return_value=datetime.now())
+@patch.object(monitor, "run_ccusage")
+@patch.object(monitor, "run_ccusage_session")
+def test_main_plain_mode_no_start_time(
+    mock_session, mock_usage, mock_reset, mock_sleep, mock_os, capsys
+):
+    """Monitor should run one iteration even if startTime is missing."""
+    mock_usage.return_value = {
+        "blocks": [
+            {
+                "isActive": True,
                 "model": "claude-opus-4",
                 "totalTokens": 1000,
                 "sessionId": "abc123",
