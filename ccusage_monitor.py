@@ -246,6 +246,24 @@ def get_token_limit(plan, blocks=None):
     return limits.get(plan, 7000)
 
 
+def update_switch_state(tokens_used, token_limit, plan,
+                        switched, shown, blocks):
+    """Update plan based on usage and determine notification state."""
+    if tokens_used > token_limit and plan == 'pro':
+        new_limit = get_token_limit('custom_max', blocks)
+        if new_limit > token_limit:
+            token_limit = new_limit
+            plan = 'custom_max'
+            if not switched:
+                switched = True
+
+    show = switched and not shown
+    if show:
+        shown = True
+
+    return plan, token_limit, switched, shown, show
+
+
 def main():
     """Main monitoring loop."""
     args = parse_args()
@@ -259,6 +277,10 @@ def main():
             token_limit = get_token_limit('pro')  # Fallback to pro
     else:
         token_limit = get_token_limit(args.plan)
+
+    # Track if we've switched from pro to a higher custom limit
+    switched_to_custom_max = False
+    switch_notification_shown = False
     
     try:
         # Initial screen clear and hide cursor
@@ -288,12 +310,21 @@ def main():
             # Extract data from active block
             tokens_used = active_block.get('totalTokens', 0)
             
-            # Check if tokens exceed limit and switch to custom_max if needed
-            if tokens_used > token_limit and args.plan == 'pro':
-                # Auto-switch to custom_max when pro limit is exceeded
-                new_limit = get_token_limit('custom_max', data['blocks'])
-                if new_limit > token_limit:
-                    token_limit = new_limit
+            # Update plan and notification state
+            (
+                args.plan,
+                token_limit,
+                switched_to_custom_max,
+                switch_notification_shown,
+                show_switch_notification,
+            ) = update_switch_state(
+                tokens_used,
+                token_limit,
+                args.plan,
+                switched_to_custom_max,
+                switch_notification_shown,
+                data['blocks'],
+            )
             
             usage_percentage = (tokens_used / token_limit) * 100 if token_limit > 0 else 0
             tokens_left = token_limit - tokens_used
@@ -371,11 +402,8 @@ def main():
             print(f"🔄 {white}Token Reset:{reset}   {reset_time_str}")
             print()
             
-            # Show notification if we switched to custom_max
-            show_switch_notification = False
-            if tokens_used > 7000 and args.plan == 'pro' and token_limit > 7000:
-                show_switch_notification = True
-            
+            # Notification when exceeding Pro plan (show once)
+
             # Notification when tokens exceed max limit
             show_exceed_notification = tokens_used > token_limit
             
