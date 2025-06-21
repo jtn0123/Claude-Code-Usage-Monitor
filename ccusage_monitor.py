@@ -71,6 +71,27 @@ def run_ccusage_session():
         return None
 
 
+def _find_target_session(active_block, sessions):
+    """Return the session matching the active block."""
+    active_id = active_block.get("sessionId")
+    if active_id:
+        for sess in sessions:
+            if sess.get("sessionId") == active_id:
+                return sess
+    active_start = active_block.get("startTime")
+    active_last = active_block.get("lastActivity")
+    for sess in sessions:
+        if sess.get("startTime") == active_start or sess.get("lastActivity") == active_last:
+            return sess
+    if sessions:
+        return sorted(
+            sessions,
+            key=lambda x: x.get("sessionId") or x.get("lastActivity") or "",
+            reverse=True,
+        )[0]
+    return None
+
+
 def get_session_model_usage(active_block, session_info):
     """Return model token usage mapping for the active session.
 
@@ -83,26 +104,7 @@ def get_session_model_usage(active_block, session_info):
     if not session_info or "sessions" not in session_info or not active_block:
         return {}
     sessions = session_info["sessions"]
-    target_session = None
-    active_id = active_block.get("sessionId")
-    if active_id:
-        for s in sessions:
-            if s.get("sessionId") == active_id:
-                target_session = s
-                break
-    if not target_session:
-        active_start = active_block.get("startTime")
-        active_last = active_block.get("lastActivity")
-        for s in sessions:
-            if s.get("startTime") == active_start or s.get("lastActivity") == active_last:
-                target_session = s
-                break
-    if not target_session and sessions:
-        target_session = sorted(
-            sessions,
-            key=lambda x: x.get("sessionId") or x.get("lastActivity") or "",
-            reverse=True,
-        )[0]
+    target_session = _find_target_session(active_block, sessions)
     model_usage = {}
     if target_session and "modelBreakdowns" in target_session:
         for br in target_session["modelBreakdowns"]:
@@ -149,41 +151,51 @@ def create_token_progress_bar(percentage, width=50, plain=False):
     return progress
 
 
+def get_model_color(model):
+    """Return rich and plain color for a model name."""
+    if "opus" in model:
+        return ("cyan", "\033[96m")
+    if "sonnet" in model:
+        return ("green", "\033[92m")
+    return ("magenta", "\033[95m")
+
+
 def create_model_ratio_bar(model_usage, width=40, plain=False):
     """Return a single bar visualizing token ratio across models."""
     total_tokens = sum(v["total"] for v in model_usage.values())
     if total_tokens <= 0:
         return Text("") if not plain and RICH_AVAILABLE else ""
 
-    def _get_color(model):
-        if "opus" in model:
-            return ("cyan", "\033[96m")
-        if "sonnet" in model:
-            return ("green", "\033[92m")
-        return ("magenta", "\033[95m")
+    def _add_segment(model, data, is_last, allocated, segments, info_parts):
+        percentage = (data["total"] / total_tokens) * 100
+        bar_len = width - allocated if is_last else int(width * percentage / 100)
+        color_name, color_code = get_model_color(model)
+        token_segment = "█" * bar_len
+        if plain or not RICH_AVAILABLE:
+            segments.append(f"{color_code}{token_segment}")
+        else:
+            segments.append(Text(token_segment, style=color_name))
+        info_parts.append(f"{format_model_name(model)} {percentage:.0f}%")
+        return bar_len
 
     segments = []
     info_parts = []
     allocated = 0
     items = list(model_usage.items())
     for idx, (model, data) in enumerate(items):
-        percentage = (data["total"] / total_tokens) * 100
-        bar_len = int(width * percentage / 100)
-        if idx == len(items) - 1:
-            bar_len = width - allocated
-        allocated += bar_len
-        color_name, color_code = _get_color(model)
-        name = format_model_name(model)
-        if plain or not RICH_AVAILABLE:
-            segments.append(f"{color_code}{'█' * bar_len}")
-        else:
-            segments.append(Text("█" * bar_len, style=color_name))
-        info_parts.append(f"{name} {percentage:.0f}%")
+        allocated += _add_segment(
+            model,
+            data,
+            idx == len(items) - 1,
+            allocated,
+            segments,
+            info_parts,
+        )
 
     if plain or not RICH_AVAILABLE:
         reset = "\033[0m"
-        bar = "".join(segments) + reset
-        return f"{bar} {' '.join(info_parts)}"
+        ratio_bar = "".join(segments) + reset
+        return f"{ratio_bar} {' '.join(info_parts)}"
 
     text = Text.assemble(*segments)
     text.append(" " + " ".join(info_parts))
@@ -369,12 +381,11 @@ def get_velocity_indicator(burn_rate):
     """Get velocity emoji based on burn rate."""
     if burn_rate < 50:
         return "🐌"  # Slow
-    elif burn_rate < 150:
+    if burn_rate < 150:
         return "➡️"  # Normal
-    elif burn_rate < 300:
+    if burn_rate < 300:
         return "🚀"  # Fast
-    else:
-        return "⚡"  # Very fast
+    return "⚡"  # Very fast
 
 
 def calculate_hourly_burn_rate(blocks, current_time):
@@ -385,29 +396,21 @@ def calculate_hourly_burn_rate(blocks, current_time):
     one_hour_ago = current_time - timedelta(hours=1)
     total_tokens = 0
 
+    def _get_session_end(b, now):
+        actual_end_str = b.get("actualEndTime")
+        if b.get("isActive", False):
+            return now
+        if actual_end_str:
+            return datetime.fromisoformat(actual_end_str.replace("Z", "+00:00"))
+        return now
+
     for block in blocks:
         start_time_str = block.get("startTime")
-        if not start_time_str:
+        if not start_time_str or block.get("isGap", False):
             continue
 
-        # Parse start time
         start_time = datetime.fromisoformat(start_time_str.replace("Z", "+00:00"))
-
-        # Skip gaps
-        if block.get("isGap", False):
-            continue
-
-        # Determine session end time
-        if block.get("isActive", False):
-            # For active sessions, use current time
-            session_actual_end = current_time
-        else:
-            # For completed sessions, use actualEndTime or current time
-            actual_end_str = block.get("actualEndTime")
-            if actual_end_str:
-                session_actual_end = datetime.fromisoformat(actual_end_str.replace("Z", "+00:00"))
-            else:
-                session_actual_end = current_time
+        session_actual_end = _get_session_end(block, current_time)
 
         # Check if session overlaps with the last hour
         if session_actual_end < one_hour_ago:
@@ -531,8 +534,7 @@ def get_token_limit(plan, blocks=None):
         for block in blocks:
             if not block.get("isGap", False) and not block.get("isActive", False):
                 tokens = block.get("totalTokens", 0)
-                if tokens > max_tokens:
-                    max_tokens = tokens
+                max_tokens = max(max_tokens, tokens)
         # Return the highest found, or default to pro if none found
         return max_tokens if max_tokens > 0 else 7000
 
@@ -557,33 +559,28 @@ def update_switch_state(tokens_used, token_limit, plan, switched, shown, blocks)
     return plan, token_limit, switched, shown, show
 
 
-def run_plain_once(
+def find_active_block(blocks):
+    """Return the active block from a list of blocks."""
+    for block in blocks:
+        if block.get("isActive", False):
+            return block
+    return None
+
+
+def collect_session_stats(
     args,
     token_limit,
-    data,
+    data_blocks,
     session_info,
-    *,
-    switched_to_custom_max=False,
-    switch_notification_shown=False,
+    switched_to_custom_max,
+    switch_notification_shown,
 ):
-    """Render a single plain-text update and return updated state."""
-    if not data or "blocks" not in data:
-        print("Failed to get usage data")
-        return token_limit, switched_to_custom_max, switch_notification_shown
-
-    active_block = None
-    for block in data["blocks"]:
-        if block.get("isActive", False):
-            active_block = block
-            break
-
+    """Return metrics and updated state for the active session."""
+    active_block = find_active_block(data_blocks)
     if not active_block:
-        print("No active session found")
-        return token_limit, switched_to_custom_max, switch_notification_shown
+        return None, token_limit, switched_to_custom_max, switch_notification_shown, False
 
     tokens_used = active_block.get("totalTokens", 0)
-    active_model = active_block.get("model")
-    model_usage = get_session_model_usage(active_block, session_info)
 
     (
         args.plan,
@@ -597,11 +594,11 @@ def run_plain_once(
         args.plan,
         switched_to_custom_max,
         switch_notification_shown,
-        data["blocks"],
+        data_blocks,
     )
 
-    usage_percentage = (tokens_used / token_limit) * 100 if token_limit > 0 else 0
-    tokens_left = token_limit - tokens_used
+    active_model = active_block.get("model")
+    model_usage = get_session_model_usage(active_block, session_info)
 
     start_time_str = active_block.get("startTime")
     if start_time_str:
@@ -610,16 +607,48 @@ def run_plain_once(
     else:
         current_time = datetime.now()
 
-    burn_rate = calculate_hourly_burn_rate(data["blocks"], current_time)
+    burn_rate = calculate_hourly_burn_rate(data_blocks, current_time)
     reset_time = get_next_reset_time(current_time, args.reset_hour, args.timezone)
     time_to_reset = reset_time - current_time
     minutes_to_reset = time_to_reset.total_seconds() / 60
 
+    tokens_left = token_limit - tokens_used
     if burn_rate > 0 and tokens_left > 0:
         minutes_to_depletion = tokens_left / burn_rate
         predicted_end_time = current_time + timedelta(minutes=minutes_to_depletion)
     else:
         predicted_end_time = reset_time
+
+    time_since_reset = max(0, 300 - minutes_to_reset)
+
+    metrics = {
+        "tokens_used": tokens_used,
+        "active_model": active_model,
+        "model_usage": model_usage,
+        "burn_rate": burn_rate,
+        "reset_time": reset_time,
+        "predicted_end_time": predicted_end_time,
+        "time_since_reset": time_since_reset,
+        "tokens_left": tokens_left,
+        "current_time": current_time,
+        "show_switch_notification": show_switch_notification,
+    }
+    return metrics, token_limit, switched_to_custom_max, switch_notification_shown, True
+
+
+def display_plain_report(metrics, token_limit, args):
+    """Print a plain text status update using collected metrics."""
+    tokens_used = metrics["tokens_used"]
+    tokens_left = metrics["tokens_left"]
+    active_model = metrics["active_model"]
+    model_usage = metrics["model_usage"]
+    burn_rate = metrics["burn_rate"]
+    reset_time = metrics["reset_time"]
+    predicted_end_time = metrics["predicted_end_time"]
+    time_since_reset = metrics["time_since_reset"]
+    show_switch_notification = metrics["show_switch_notification"]
+
+    usage_percentage = (tokens_used / token_limit) * 100 if token_limit > 0 else 0
 
     cyan = "\033[96m"
     red = "\033[91m"
@@ -636,7 +665,6 @@ def run_plain_once(
     )
     print()
 
-    time_since_reset = max(0, 300 - minutes_to_reset)
     print(
         f"⏳ {white}Time to Reset:{reset}  "
         f"{create_time_progress_bar(time_since_reset, 300, plain=True)}"
@@ -653,14 +681,14 @@ def run_plain_once(
         f"{yellow}{burn_rate:.1f}{reset} {gray}tokens/min{reset}"
     )
     if model_usage and len(model_usage) > 1:
-        bar = create_model_ratio_bar(model_usage, plain=True)
-        print(f"💠 {bar}")
+        ratio_bar = create_model_ratio_bar(model_usage, plain=True)
+        print(f"💠 {ratio_bar}")
         print()
     elif model_usage:
         print("\n💠 Model Usage:")
         total_models_tokens = sum(v["total"] for v in model_usage.values())
         for m, md in model_usage.items():
-            bar = create_model_progress_bar(
+            progress_line = create_model_progress_bar(
                 m,
                 md["total"],
                 total_models_tokens,
@@ -668,7 +696,7 @@ def run_plain_once(
                 input_tokens=md.get("input_tokens"),
                 output_tokens=md.get("output_tokens"),
             )
-            print(f"    {bar}")
+            print(f"    {progress_line}")
         print()
     else:
         print()
@@ -706,6 +734,126 @@ def run_plain_once(
     )
 
     print("\033[J", end="", flush=True)
+
+
+def build_rich_panel(metrics, token_limit, args):
+    """Return a rich Panel object for the current metrics."""
+    tokens_used = metrics["tokens_used"]
+    tokens_left = metrics["tokens_left"]
+    active_model = metrics["active_model"]
+    model_usage = metrics["model_usage"]
+    burn_rate = metrics["burn_rate"]
+    reset_time = metrics["reset_time"]
+    predicted_end_time = metrics["predicted_end_time"]
+    time_since_reset = metrics["time_since_reset"]
+    show_switch_notification = metrics["show_switch_notification"]
+
+    usage_percentage = (tokens_used / token_limit) * 100 if token_limit > 0 else 0
+
+    local_tz = resolve_timezone(args.timezone)
+    predicted_end_local = predicted_end_time.astimezone(local_tz)
+    reset_time_local = reset_time.astimezone(local_tz)
+    predicted_end_str = predicted_end_local.strftime("%H:%M")
+    reset_time_str = reset_time_local.strftime("%H:%M")
+
+    body = [Text("CLAUDE TOKEN MONITOR", style="bold cyan")]
+    if active_model:
+        body.append(Text(f"Active Model: {format_model_name(active_model)}"))
+
+    body.append(Text("📊 Token Usage:", style="bold"))
+    body.append(create_token_progress_bar(usage_percentage))
+
+    body.append(Text("⏳ Time to Reset:", style="bold"))
+    body.append(create_time_progress_bar(time_since_reset, 300))
+
+    body.append(
+        Text(
+            f"🎯 Tokens: {tokens_used:,} / ~{token_limit:,} ({tokens_left:,} left)",
+            style="white",
+        )
+    )
+    body.append(Text(f"🔥 Burn Rate: {burn_rate:.1f} tokens/min", style="yellow"))
+
+    if model_usage:
+        if len(model_usage) > 1:
+            body.append(create_model_ratio_bar(model_usage))
+            body.append(Text(""))
+        else:
+            body.append(Text("\n💠 Model Usage:", style="bold"))
+            total_models_tokens = sum(v["total"] for v in model_usage.values())
+            for m, md in model_usage.items():
+                progress_line = create_model_progress_bar(
+                    m,
+                    md["total"],
+                    total_models_tokens,
+                    input_tokens=md.get("input_tokens"),
+                    output_tokens=md.get("output_tokens"),
+                )
+                body.append(progress_line)
+            body.append(Text(""))
+
+    body.append(Text(f"🏁 Predicted End: {predicted_end_str}"))
+    body.append(Text(f"🔄 Token Reset:   {reset_time_str}"))
+
+    show_exceed_notification = tokens_used > token_limit
+    if show_switch_notification:
+        body.append(
+            Text(
+                f"🔄 Tokens exceeded Pro limit - switched to custom_max ({token_limit:,})",
+                style="yellow",
+            )
+        )
+    if show_exceed_notification:
+        body.append(
+            Text(
+                f"🚨 TOKENS EXCEEDED MAX LIMIT! ({tokens_used:,} > {token_limit:,})",
+                style="red",
+            )
+        )
+    if predicted_end_time < reset_time:
+        body.append(Text("⚠️  Tokens will run out BEFORE reset!", style="red"))
+
+    current_time_str = datetime.now().strftime("%H:%M:%S")
+    body.append(
+        Text(
+            f"⏰ {current_time_str} 📝 Smooth sailing... | Ctrl+C to exit 🟨",
+            style="dim",
+        )
+    )
+
+    return Panel(Group(*body))
+
+
+def run_plain_once(
+    args,
+    token_limit,
+    data,
+    session_info,
+    *,
+    switched_to_custom_max=False,
+    switch_notification_shown=False,
+):
+    """Render a single plain-text update and return updated state."""
+    if not data or "blocks" not in data:
+        print("Failed to get usage data")
+        return token_limit, switched_to_custom_max, switch_notification_shown
+
+    metrics, token_limit, switched_to_custom_max, switch_notification_shown, ok = (
+        collect_session_stats(
+            args,
+            token_limit,
+            data["blocks"],
+            session_info,
+            switched_to_custom_max,
+            switch_notification_shown,
+        )
+    )
+
+    if not ok or metrics is None:
+        print("No active session found")
+        return token_limit, switched_to_custom_max, switch_notification_shown
+
+    display_plain_report(metrics, token_limit, args)
 
     return token_limit, switched_to_custom_max, switch_notification_shown
 
@@ -760,133 +908,22 @@ def run_rich_once(
         console.print("Failed to get usage data")
         return None, token_limit, switched_to_custom_max, switch_notification_shown
 
-    active_block = None
-    for block in data["blocks"]:
-        if block.get("isActive", False):
-            active_block = block
-            break
+    metrics, token_limit, switched_to_custom_max, switch_notification_shown, ok = (
+        collect_session_stats(
+            args,
+            token_limit,
+            data["blocks"],
+            session_info,
+            switched_to_custom_max,
+            switch_notification_shown,
+        )
+    )
 
-    if not active_block:
+    if not ok or metrics is None:
         console.print("No active session found")
         return None, token_limit, switched_to_custom_max, switch_notification_shown
 
-    tokens_used = active_block.get("totalTokens", 0)
-    active_model = active_block.get("model")
-    model_usage = get_session_model_usage(active_block, session_info)
-
-    (
-        args.plan,
-        token_limit,
-        switched_to_custom_max,
-        switch_notification_shown,
-        show_switch_notification,
-    ) = update_switch_state(
-        tokens_used,
-        token_limit,
-        args.plan,
-        switched_to_custom_max,
-        switch_notification_shown,
-        data["blocks"],
-    )
-
-    usage_percentage = (tokens_used / token_limit) * 100 if token_limit > 0 else 0
-    tokens_left = token_limit - tokens_used
-
-    start_time_str = active_block.get("startTime")
-    if start_time_str:
-        start_time = datetime.fromisoformat(start_time_str.replace("Z", "+00:00"))
-        current_time = datetime.now(start_time.tzinfo)
-    else:
-        current_time = datetime.now()
-
-    burn_rate = calculate_hourly_burn_rate(data["blocks"], current_time)
-    reset_time = get_next_reset_time(current_time, args.reset_hour, args.timezone)
-    time_to_reset = reset_time - current_time
-    minutes_to_reset = time_to_reset.total_seconds() / 60
-
-    if burn_rate > 0 and tokens_left > 0:
-        minutes_to_depletion = tokens_left / burn_rate
-        predicted_end_time = current_time + timedelta(minutes=minutes_to_depletion)
-    else:
-        predicted_end_time = reset_time
-
-    time_since_reset = max(0, 300 - minutes_to_reset)
-
-    local_tz = resolve_timezone(args.timezone)
-    predicted_end_local = predicted_end_time.astimezone(local_tz)
-    reset_time_local = reset_time.astimezone(local_tz)
-    predicted_end_str = predicted_end_local.strftime("%H:%M")
-    reset_time_str = reset_time_local.strftime("%H:%M")
-
-    body = [Text("CLAUDE TOKEN MONITOR", style="bold cyan")]
-
-    if active_model:
-        body.append(Text(f"Active Model: {format_model_name(active_model)}"))
-
-    body.append(Text("📊 Token Usage:", style="bold"))
-    body.append(create_token_progress_bar(usage_percentage))
-
-    body.append(Text("⏳ Time to Reset:", style="bold"))
-    body.append(create_time_progress_bar(time_since_reset, 300))
-
-    body.append(
-        Text(
-            f"🎯 Tokens: {tokens_used:,} / ~{token_limit:,} ({tokens_left:,} left)",
-            style="white",
-        )
-    )
-    body.append(Text(f"🔥 Burn Rate: {burn_rate:.1f} tokens/min", style="yellow"))
-
-    if model_usage and len(model_usage) > 1:
-        bar = create_model_ratio_bar(model_usage)
-        body.append(bar)
-        body.append(Text(""))
-    elif model_usage:
-        body.append(Text("\n💠 Model Usage:", style="bold"))
-        total_models_tokens = sum(v["total"] for v in model_usage.values())
-        for m, md in model_usage.items():
-            bar = create_model_progress_bar(
-                m,
-                md["total"],
-                total_models_tokens,
-                input_tokens=md.get("input_tokens"),
-                output_tokens=md.get("output_tokens"),
-            )
-            body.append(bar)
-        body.append(Text(""))
-    else:
-        body.append(Text(""))
-
-    body.append(Text(f"🏁 Predicted End: {predicted_end_str}"))
-    body.append(Text(f"🔄 Token Reset:   {reset_time_str}"))
-
-    show_exceed_notification = tokens_used > token_limit
-    if show_switch_notification:
-        body.append(
-            Text(
-                f"🔄 Tokens exceeded Pro limit - switched to custom_max ({token_limit:,})",
-                style="yellow",
-            )
-        )
-    if show_exceed_notification:
-        body.append(
-            Text(
-                f"🚨 TOKENS EXCEEDED MAX LIMIT! ({tokens_used:,} > {token_limit:,})",
-                style="red",
-            )
-        )
-    if predicted_end_time < reset_time:
-        body.append(Text("⚠️  Tokens will run out BEFORE reset!", style="red"))
-
-    current_time_str = datetime.now().strftime("%H:%M:%S")
-    body.append(
-        Text(
-            f"⏰ {current_time_str} 📝 Smooth sailing... | Ctrl+C to exit 🟨",
-            style="dim",
-        )
-    )
-
-    panel = Panel(Group(*body))
+    panel = build_rich_panel(metrics, token_limit, args)
     console.print(panel)
     return panel, token_limit, switched_to_custom_max, switch_notification_shown
 
