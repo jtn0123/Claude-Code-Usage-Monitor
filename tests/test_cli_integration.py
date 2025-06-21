@@ -1,8 +1,8 @@
 import importlib.util
 from pathlib import Path
 from unittest.mock import patch
+from argparse import Namespace
 from datetime import datetime
-import sys
 
 spec = importlib.util.spec_from_file_location(
     "ccusage_monitor", Path(__file__).resolve().parents[1] / "ccusage_monitor.py"
@@ -12,12 +12,8 @@ monitor = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(monitor)
 
 
-@patch("os.system")
-@patch("time.sleep", side_effect=KeyboardInterrupt)
-@patch.object(monitor, "run_ccusage")
-@patch.object(monitor, "run_ccusage_session")
-def test_main_plain_mode_once(mock_session, mock_usage, mock_sleep, mock_os, capsys):
-    mock_usage.return_value = {
+def test_run_plain_once_basic(capsys):
+    data = {
         "blocks": [
             {
                 "isActive": True,
@@ -28,7 +24,7 @@ def test_main_plain_mode_once(mock_session, mock_usage, mock_sleep, mock_os, cap
             }
         ]
     }
-    mock_session.return_value = {
+    session_info = {
         "sessions": [
             {
                 "sessionId": "abc123",
@@ -36,27 +32,17 @@ def test_main_plain_mode_once(mock_session, mock_usage, mock_sleep, mock_os, cap
             }
         ]
     }
-    with patch.object(sys, "argv", ["prog", "--plain"]):
-        try:
-            monitor.main()
-        except SystemExit:
-            pass
+    args = Namespace(plan="pro", reset_hour=None, timezone="UTC", plain=True)
+    monitor.run_plain_once(args, 7000, data, session_info)
 
     captured = capsys.readouterr().out
     assert "CLAUDE TOKEN MONITOR" in captured
     assert "Token Usage" in captured
 
 
-@patch("os.system")
-@patch("time.sleep", side_effect=KeyboardInterrupt)
-@patch.object(monitor, "get_next_reset_time", return_value=datetime.now())
-@patch.object(monitor, "run_ccusage")
-@patch.object(monitor, "run_ccusage_session")
-def test_main_plain_mode_no_start_time(
-    mock_session, mock_usage, mock_reset, mock_sleep, mock_os, capsys
-):
-    """Monitor should run one iteration even if startTime is missing."""
-    mock_usage.return_value = {
+def test_run_plain_once_no_start_time(capsys):
+    """Monitor should handle missing startTime."""
+    data = {
         "blocks": [
             {
                 "isActive": True,
@@ -66,7 +52,7 @@ def test_main_plain_mode_no_start_time(
             }
         ]
     }
-    mock_session.return_value = {
+    session_info = {
         "sessions": [
             {
                 "sessionId": "abc123",
@@ -74,11 +60,9 @@ def test_main_plain_mode_no_start_time(
             }
         ]
     }
-    with patch.object(sys, "argv", ["prog", "--plain"]):
-        try:
-            monitor.main()
-        except SystemExit:
-            pass
+    args = Namespace(plan="pro", reset_hour=None, timezone="UTC", plain=True)
+    with patch.object(monitor, "get_next_reset_time", return_value=datetime.now()):
+        monitor.run_plain_once(args, 7000, data, session_info)
 
     captured = capsys.readouterr().out
     assert "CLAUDE TOKEN MONITOR" in captured
