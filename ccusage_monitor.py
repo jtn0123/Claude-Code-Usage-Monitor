@@ -696,10 +696,12 @@ def display_plain_report(metrics, token_limit, args):
         print()
 
     local_tz = resolve_timezone(args.timezone)
+    tz_name = getattr(local_tz, "key", str(local_tz))
     predicted_end_str = metrics["predicted_end_time"].astimezone(local_tz).strftime("%H:%M")
     reset_time_str = metrics["reset_time"].astimezone(local_tz).strftime("%H:%M")
     print(f"🏁 {COLOR_WHITE}Predicted End:{COLOR_RESET} {predicted_end_str}")
     print(f"🔄 {COLOR_WHITE}Token Reset:{COLOR_RESET}   {reset_time_str}")
+    print(f"🕒 {COLOR_WHITE}Time Zone:{COLOR_RESET}  {tz_name}")
     print()
 
     if metrics["show_switch_notification"]:
@@ -781,8 +783,10 @@ def build_rich_panel(metrics, token_limit, args):  # pylint: disable=too-many-lo
                 body.append(create_model_progress_bar(m, usage_info))
             body.append(Text(""))
 
+    tz_name = getattr(local_tz, "key", str(local_tz))
     body.append(Text(f"🏁 Predicted End: {predicted_end_str}"))
     body.append(Text(f"🔄 Token Reset:   {reset_time_str}"))
+    body.append(Text(f"🕒 Time Zone:  {tz_name}"))
 
     if show_switch_notification:
         body.append(
