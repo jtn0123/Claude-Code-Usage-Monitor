@@ -387,7 +387,7 @@ Help us test on different platforms:
 
 We're collecting **anonymized data** about token limits to improve auto-detection:
 
-**What to share in [Issue #1](https://github.com/Maciek-roboblog/Claude-Code-Usage-Monitor/issues/1)**:
+**What to share in [Issue #1](https://github.com/jtn0123/Claude-Code-Usage-Monitor/issues/1)**:
 - Your subscription type (Pro, Teams, Enterprise)
 - Maximum tokens reached (custom_max value)
 - When the limit was exceeded
