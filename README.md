@@ -59,6 +59,7 @@ For immediate testing (not recommended for regular use):
 ```bash
 # Install dependencies
 npm install -g ccusage
+ccusage --version  # ensure version is >=0.7.0 for `session --breakdown`
 
 
 # Clone and run
@@ -121,8 +122,10 @@ virtualenv venv
 #### Step-by-Step Setup
 
 ```bash
-# 1. Install ccusage globally
+# 1. Install ccusage globally (requires v0.7.0+ for `session --breakdown`)
 npm install -g ccusage
+# If you already have ccusage installed, upgrade to the latest version
+ccusage --version  # verify version is >=0.7.0
 
 # 2. Clone the repository
 git clone https://github.com/jtn0123/Claude-Code-Usage-Monitor
