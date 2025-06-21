@@ -4,7 +4,7 @@ import subprocess
 import json
 import sys
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 import os
 import argparse
 import pytz
