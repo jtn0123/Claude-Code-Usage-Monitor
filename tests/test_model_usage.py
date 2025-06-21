@@ -67,10 +67,13 @@ def test_get_session_model_usage_no_match():
 def test_format_model_usage_summary():
     tokens = 5000
     total_tokens = 10000
-    summary = monitor.format_model_usage("claude-opus-4", tokens, total_tokens)
-    expected_cost = tokens * (
-        monitor.MODEL_COST_PER_MILLION["claude-opus-4"] / 1_000_000
-    )
+    pricing = {
+        "input_cost_per_token": 0.000015,
+        "output_cost_per_token": 0.000075,
+    }
+    with patch.object(monitor, "get_model_pricing", return_value=pricing):
+        summary = monitor.format_model_usage("claude-opus-4", tokens, total_tokens)
+    expected_cost = tokens * (pricing["input_cost_per_token"] + pricing["output_cost_per_token"]) / 2
     expected_cost_str = f"${expected_cost:.2f}"
     assert "50.0%" in summary
     assert "5,000" in summary
@@ -78,6 +81,7 @@ def test_format_model_usage_summary():
 
 
 def test_format_model_usage_unknown_model():
-    summary = monitor.format_model_usage("unknown-model", 100, 1000)
+    with patch.object(monitor, "get_model_pricing", return_value=None):
+        summary = monitor.format_model_usage("unknown-model", 100, 1000)
     assert "10.0%" in summary
     assert "$0.00" in summary

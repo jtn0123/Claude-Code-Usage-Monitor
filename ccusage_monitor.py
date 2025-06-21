@@ -7,6 +7,7 @@ import time
 from datetime import datetime, timedelta
 import os
 import argparse
+import urllib.request
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 try:
@@ -141,17 +142,74 @@ def create_time_progress_bar(elapsed_minutes, total_minutes, width=50, plain=Fal
     return progress
 
 
-# Approximate cost per million tokens for known models
-MODEL_COST_PER_MILLION = {
-    "claude-opus-4": 75.0,
-    "claude-sonnet-4": 15.0,
+# Pricing data source used by the upstream `ccusage` project
+LITELLM_PRICING_URL = (
+    "https://raw.githubusercontent.com/BerriAI/litellm/main/"
+    "model_prices_and_context_window.json"
+)
+
+# Fallback pricing in case fetching from LiteLLM fails
+DEFAULT_MODEL_PRICING = {
+    "claude-opus-4": {
+        "input_cost_per_token": 0.000015,
+        "output_cost_per_token": 0.000075,
+    },
+    "claude-sonnet-4": {
+        "input_cost_per_token": 0.000003,
+        "output_cost_per_token": 0.000015,
+    },
+    "claude-opus-4-20250514": {
+        "input_cost_per_token": 0.000015,
+        "output_cost_per_token": 0.000075,
+    },
+    "claude-4-opus-20250514": {
+        "input_cost_per_token": 0.000015,
+        "output_cost_per_token": 0.000075,
+    },
+    "claude-sonnet-4-20250514": {
+        "input_cost_per_token": 0.000003,
+        "output_cost_per_token": 0.000015,
+    },
+    "claude-4-sonnet-20250514": {
+        "input_cost_per_token": 0.000003,
+        "output_cost_per_token": 0.000015,
+    },
 }
+
+_PRICING_CACHE: dict | None = None
+
+
+def get_model_pricing(model: str) -> dict | None:
+    """Fetch pricing information for a model from LiteLLM."""
+    global _PRICING_CACHE
+    if _PRICING_CACHE is None:
+        try:
+            with urllib.request.urlopen(LITELLM_PRICING_URL, timeout=5) as resp:
+                _PRICING_CACHE = json.load(resp)
+        except Exception:
+            _PRICING_CACHE = DEFAULT_MODEL_PRICING.copy()
+    pricing = _PRICING_CACHE.get(model)
+    if pricing:
+        return pricing
+    for key, value in _PRICING_CACHE.items():
+        if model in key:
+            return value
+    return DEFAULT_MODEL_PRICING.get(model)
 
 
 def format_model_usage(model, tokens, total_tokens):
     """Return formatted percentage, tokens and cost for a model."""
     percentage = (tokens / total_tokens * 100) if total_tokens > 0 else 0.0
-    cost_per_token = MODEL_COST_PER_MILLION.get(model, 0) / 1_000_000
+    pricing = get_model_pricing(model)
+    if pricing:
+        input_cost = pricing.get("input_cost_per_token", 0)
+        output_cost = pricing.get("output_cost_per_token", 0)
+        if input_cost and output_cost:
+            cost_per_token = (input_cost + output_cost) / 2
+        else:
+            cost_per_token = input_cost or output_cost
+    else:
+        cost_per_token = 0
     cost = tokens * cost_per_token
     return f"{percentage:5.1f}% {tokens:,} tokens (${cost:.2f})"
 
