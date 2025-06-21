@@ -194,6 +194,9 @@ claude-monitor
 # Press Ctrl+C to gracefully exit
 ```
 
+The monitor also displays per-model token totals for the current session.
+Make sure the `ccusage` CLI is installed (`npm install -g ccusage`).
+
 ### Configuration Options
 
 #### Specify Your Plan
