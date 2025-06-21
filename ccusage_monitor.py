@@ -127,6 +127,21 @@ def create_time_progress_bar(elapsed_minutes, total_minutes, width=50):
     return f"⏰ [{blue}{blue_bar}{red}{red_bar}{reset}] {remaining_time}"
 
 
+# Approximate cost per million tokens for known models
+MODEL_COST_PER_MILLION = {
+    "claude-opus-4": 75.0,
+    "claude-sonnet-4": 15.0,
+}
+
+
+def format_model_usage(model, tokens, total_tokens):
+    """Return formatted percentage, tokens and cost for a model."""
+    percentage = (tokens / total_tokens * 100) if total_tokens > 0 else 0.0
+    cost_per_token = MODEL_COST_PER_MILLION.get(model, 0) / 1_000_000
+    cost = tokens * cost_per_token
+    return f"{percentage:5.1f}% {tokens:,} tokens (${cost:.2f})"
+
+
 def print_header():
     """Print the stylized header with sparkles."""
     cyan = "\033[96m"
@@ -482,8 +497,10 @@ def main():
             )
             if model_usage:
                 print("\n💠 Model Usage:")
+                total_models_tokens = sum(model_usage.values())
                 for m, t in model_usage.items():
-                    print(f"    {m:<15} {t:,} tokens")
+                    summary = format_model_usage(m, t, total_models_tokens)
+                    print(f"    {m:<15} {summary}")
                 print()
             else:
                 print()
