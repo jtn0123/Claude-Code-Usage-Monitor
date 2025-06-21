@@ -46,6 +46,7 @@ A beautiful real-time terminal monitoring tool for Claude AI token usage. Track 
 - **⚠️ Warning system** - Alerts when tokens exceed limits or will deplete before session reset
 - **💼 Professional UI** - Clean, colorful terminal interface with emojis
 - **⏰ Customizable scheduling** - Set your own reset times and timezones
+- **🎛 Model awareness** - Automatically displays the active Claude model
 
 ---
 
@@ -267,6 +268,7 @@ The default timezone is **Europe/Warsaw**. Change it to any valid timezone:
 - **Token Progress**: Color-coded bars showing current usage vs limits
 - **Time Progress**: Visual countdown to next session reset
 - **Burn Rate Indicator**: Real-time consumption velocity
+- **Model Awareness**: Displays the active Claude model in the header
 
 #### 🔮 Smart Predictions
 - Calculates when tokens will run out based on current burn rate

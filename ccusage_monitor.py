@@ -214,7 +214,18 @@ def format_model_usage(model, tokens, total_tokens):
     return f"{percentage:5.1f}% {tokens:,} tokens (${cost:.2f})"
 
 
-def print_header():
+def format_model_name(model: str | None) -> str | None:
+    """Return a short human readable model name."""
+    if not model:
+        return None
+    if "opus" in model:
+        return "Opus"
+    if "sonnet" in model:
+        return "Sonnet"
+    return model
+
+
+def print_header(active_model: str | None = None):
     """Print the stylized header with sparkles."""
     cyan = "\033[96m"
     blue = "\033[94m"
@@ -225,6 +236,9 @@ def print_header():
 
     print(f"{sparkles}{cyan}CLAUDE TOKEN MONITOR{reset} {sparkles}")
     print(f"{blue}{'=' * 60}{reset}")
+    if active_model:
+        formatted = format_model_name(active_model)
+        print(f"Active Model: {formatted}")
     print()
 
 
@@ -464,6 +478,7 @@ def run_plain(args, token_limit):
 
             # Extract data from active block
             tokens_used = active_block.get("totalTokens", 0)
+            active_model = active_block.get("model")
 
             session_info = run_ccusage_session()
             model_usage = get_session_model_usage(active_block, session_info)
@@ -530,7 +545,7 @@ def run_plain(args, token_limit):
             reset = "\033[0m"
 
             # Display header
-            print_header()
+            print_header(active_model)
 
             # Token Usage section
             print(
@@ -655,6 +670,7 @@ def run_rich(args, token_limit):
                     continue
 
             tokens_used = active_block.get("totalTokens", 0)
+            active_model = active_block.get("model")
             session_info = run_ccusage_session()
             model_usage = get_session_model_usage(active_block, session_info)
 
@@ -717,6 +733,9 @@ def run_rich(args, token_limit):
                 ),
                 Text(f"🔥 Burn Rate: {burn_rate:.1f} tokens/min", style="yellow"),
             ]
+
+            if active_model:
+                body.insert(1, Text(f"Active Model: {format_model_name(active_model)}"))
 
             if model_usage:
                 body.append(Text("\n💠 Model Usage:", style="bold"))
