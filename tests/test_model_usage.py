@@ -145,9 +145,7 @@ def test_format_model_usage_average_fallback():
     with patch.object(monitor, "get_model_pricing", return_value=pricing):
         summary = monitor.format_model_usage("claude-sonnet-4", tokens, total_tokens)
     expected_cost = (
-        tokens
-        * (pricing["input_cost_per_token"] + pricing["output_cost_per_token"])
-        / 2
+        tokens * (pricing["input_cost_per_token"] + pricing["output_cost_per_token"]) / 2
     )
     expected_cost_str = f"${expected_cost:.2f}"
     assert expected_cost_str in summary

@@ -8,7 +8,10 @@ import subprocess
 from unittest.mock import Mock, patch
 import pytest
 
-spec = importlib.util.spec_from_file_location("ccusage_monitor", Path(__file__).resolve().parents[1] / "ccusage_monitor.py")
+spec = importlib.util.spec_from_file_location(
+    "ccusage_monitor",
+    Path(__file__).resolve().parents[1] / "ccusage_monitor.py",
+)
 assert spec and spec.loader
 monitor = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(monitor)
@@ -23,9 +26,7 @@ def test_run_ccusage_success():
 
 
 def test_run_ccusage_failure():
-    with patch(
-        "subprocess.run", side_effect=subprocess.CalledProcessError(1, "ccusage")
-    ):
+    with patch("subprocess.run", side_effect=subprocess.CalledProcessError(1, "ccusage")):
         assert monitor.run_ccusage() is None
 
 
@@ -94,19 +95,13 @@ def test_get_next_reset_time_default():
 def test_get_next_reset_time_custom_hour_next_day():
     current = datetime(2024, 1, 1, 11, 0, tzinfo=ZoneInfo("UTC"))
     expected = datetime(2024, 1, 2, 5, 0, tzinfo=ZoneInfo("UTC"))
-    assert (
-        monitor.get_next_reset_time(current, custom_reset_hour=5, timezone_str="UTC")
-        == expected
-    )
+    assert monitor.get_next_reset_time(current, custom_reset_hour=5, timezone_str="UTC") == expected
 
 
 def test_get_next_reset_time_timezone_conversion():
     current = datetime(2024, 1, 1, 2, 0, tzinfo=ZoneInfo("UTC"))
     expected = datetime(2024, 1, 1, 4, 0, tzinfo=ZoneInfo("UTC"))
-    assert (
-        monitor.get_next_reset_time(current, timezone_str="America/New_York")
-        == expected
-    )
+    assert monitor.get_next_reset_time(current, timezone_str="America/New_York") == expected
 
 
 def test_parse_args(monkeypatch):
@@ -150,5 +145,3 @@ def test_get_token_limit_custom_max_default():
         {"isActive": True, "totalTokens": 8000},
     ]
     assert monitor.get_token_limit("custom_max", blocks) == 7000
-
-
