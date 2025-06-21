@@ -23,6 +23,53 @@ def run_ccusage():
         return None
 
 
+def run_ccusage_session():
+    """Execute ccusage session --breakdown --json and return parsed JSON."""
+    try:
+        result = subprocess.run(
+            ["ccusage", "session", "--breakdown", "--json"],
+            capture_output=True, text=True, check=True
+        )
+        return json.loads(result.stdout)
+    except (subprocess.CalledProcessError, json.JSONDecodeError) as e:
+        print(f"Error getting session breakdown: {e}")
+        return None
+
+
+def get_session_model_usage(active_block, session_info):
+    """Return {model: total_tokens} mapping for the active session."""
+    if not session_info or "sessions" not in session_info or not active_block:
+        return {}
+    sessions = session_info["sessions"]
+    target_session = None
+    active_id = active_block.get("sessionId")
+    if active_id:
+        for s in sessions:
+            if s.get("sessionId") == active_id:
+                target_session = s
+                break
+    if not target_session:
+        active_start = active_block.get("startTime")
+        active_last = active_block.get("lastActivity")
+        for s in sessions:
+            if s.get("startTime") == active_start or s.get("lastActivity") == active_last:
+                target_session = s
+                break
+    if not target_session and sessions:
+        target_session = sorted(
+            sessions,
+            key=lambda x: x.get("sessionId") or x.get("lastActivity") or "",
+            reverse=True,
+        )[0]
+    model_usage = {}
+    if target_session and "modelBreakdowns" in target_session:
+        for br in target_session["modelBreakdowns"]:
+            model = br.get("model")
+            total = br.get("totalTokens", br.get("total", 0))
+            if model:
+                model_usage[model] = total
+    return model_usage
+
 def format_time(minutes):
     """Format minutes into human-readable time (e.g., '3h 45m')."""
     if minutes < 60:
@@ -287,6 +334,9 @@ def main():
             
             # Extract data from active block
             tokens_used = active_block.get('totalTokens', 0)
+
+            session_info = run_ccusage_session()
+            model_usage = get_session_model_usage(active_block, session_info)
             
             # Check if tokens exceed limit and switch to custom_max if needed
             if tokens_used > token_limit and args.plan == 'pro':
@@ -355,7 +405,13 @@ def main():
             # Detailed stats
             print(f"🎯 {white}Tokens:{reset}         {white}{tokens_used:,}{reset} / {gray}~{token_limit:,}{reset} ({cyan}{tokens_left:,} left{reset})")
             print(f"🔥 {white}Burn Rate:{reset}      {yellow}{burn_rate:.1f}{reset} {gray}tokens/min{reset}")
-            print()
+            if model_usage:
+                print("\n💠 Model Usage:")
+                for m, t in model_usage.items():
+                    print(f"    {m:<15} {t:,} tokens")
+                print()
+            else:
+                print()
             
             # Predictions - convert to configured timezone for display
             try:
