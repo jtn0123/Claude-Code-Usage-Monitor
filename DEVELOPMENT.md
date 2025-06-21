@@ -2,6 +2,12 @@
 
 Features currently in development and planned for future releases of Claude Code Usage Monitor.
 
+### Local Development Setup
+
+```bash
+pip install -r requirements.txt
+```
+
 
 ## 🎯 Current Development Status
 
