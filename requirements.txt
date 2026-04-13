@@ -18,7 +18,7 @@ pycodestyle==2.11.1
 pyflakes==3.2.0
 Pygments==2.20.0
 pylint==3.1.0
-pytest==8.2.1
+pytest==9.0.3
 rich==14.0.0
 tomlkit==0.13.3
 typing_extensions==4.14.0
